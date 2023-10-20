@@ -16,7 +16,7 @@ class ArmEnv():
         p.setGravity(0, 0, -9.8)
         p.setRealTimeSimulation(0)
         p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf", [0, 0, 0], [0, 0, 0, 1])
-        self.pandaUid = p.loadURDF("franka_panda/panda.urdf", [0, 0, 0], [0, 0, 0, 1], useFixedBase=True)
+        self.pandaUid = p.loadURDF("franka_panda/panda.object", [0, 0, 0], [0, 0, 0, 1], useFixedBase=True)
         finger_pos = p.getLinkState(self.pandaUid, 9)[0]
         obs = np.array([finger_pos]).flatten()
         return obs

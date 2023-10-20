@@ -1,7 +1,7 @@
 import numpy as np
 import pybullet as p
 import pybullet_data
-from arm_env import ArmEnv
+from environments.arm_env import ArmEnv
 import time
 
 p.connect(p.GUI)
@@ -12,7 +12,7 @@ p.setRealTimeSimulation(0)
 #time.sleep(5)
 
 p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf", [0, 0, 0], [0, 0, 0, 1])
-targid = p.loadURDF("franka_panda/panda.urdf", [0, 0, 0], [0, 0, 0, 1], useFixedBase=True)
+targid = p.loadURDF("franka_panda/panda.object", [0, 0, 0], [0, 0, 0, 1], useFixedBase=True)
 obj_of_focus = targid
 
 n = p.getNumJoints(targid)
