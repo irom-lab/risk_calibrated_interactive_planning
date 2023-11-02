@@ -13,9 +13,9 @@ render = False
 if __name__ == "__main__":
     episodes = 1
     num_cpu = 4  # Number of processes to use
-    
+
     # Create the vectorized environment
-    env = SubprocVecEnv([make_env(i) for i in range(num_cpu)])
+    env = SubprocVecEnv([make_env(i, render=render) for i in range(num_cpu)])
 
     models_dir = f"models/{int(time.time())}/"
     logdir = f"logs/{int(time.time())}/"
