@@ -3,13 +3,13 @@ from environments.hallway_env import HallwayEnv
 from environments.make_vectorized_hallway_env import make_env
 import os
 import time
+
 from gymnasium.envs.registration import register
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
-render = False
+render = True
 
-
-# 'if __name__' Necessary for macOS multithreading
+# 'if __name__' Necessary for multithreading
 if __name__ == "__main__":
     episodes = 1
     num_cpu = 4  # Number of processes to use
@@ -32,6 +32,8 @@ if __name__ == "__main__":
     timesteps = 10000
     iters = 0
     n_iters = 10
+    print("Starting training...")
     for iter in range(n_iters):
         model.learn(total_timesteps=timesteps, reset_num_timesteps=False, tb_log_name=f"PPO")
         model.save(f"{models_dir}/{timesteps * iters}")
+    print("...Done.")

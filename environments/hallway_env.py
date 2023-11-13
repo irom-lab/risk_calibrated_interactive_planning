@@ -107,15 +107,15 @@ class HallwayEnv(gym.Env):
 
         self.font = cv2.FONT_HERSHEY_SIMPLEX
 
+        self.render = render
+
     def state_history_numpy(self):
         state_history = np.array(self.prev_states).flatten()
         return state_history
 
     def step(self, action):
+
         self.timesteps += 1
-        cv2.imshow('Hallway Environment', self.img)
-        cv2.waitKey(1)
-        self.img = 255 - np.zeros((900, 1600, 3), dtype='uint8')
 
         wall_dist = wall_set_distance(self.walls, self.robot_state)
         human_wall_dist = wall_set_distance(self.walls, self.human_state)
@@ -123,49 +123,54 @@ class HallwayEnv(gym.Env):
         robot_tripoints = state_to_tripoints(self.robot_state, self.robot_tripoints)
         human_tripoints = state_to_tripoints(self.human_state, self.human_tripoints)
 
-        # Display Goal
-        cv2.rectangle(self.img, (self.robot_goal_rect[0], self.robot_goal_rect[1]),
-                      (self.robot_goal_rect[0] + self.robot_goal_rect[2],
-                       self.robot_goal_rect[1] + self.robot_goal_rect[3]), (255, 0, 0), 3)
+        if self.render:
+            cv2.imshow('Hallway Environment', self.img)
+            cv2.waitKey(1)
+            self.img = 255 - np.zeros((900, 1600, 3), dtype='uint8')
 
-        # Display Human Goal
-        cv2.rectangle(self.img, (self.human_goal_rect[0], self.human_goal_rect[1]),
-                      (self.human_goal_rect[0] + self.human_goal_rect[2],
-                       self.human_goal_rect[1] + self.human_goal_rect[3]), (0, 0, 255), 3)
+            # Display Goal
+            cv2.rectangle(self.img, (self.robot_goal_rect[0], self.robot_goal_rect[1]),
+                          (self.robot_goal_rect[0] + self.robot_goal_rect[2],
+                           self.robot_goal_rect[1] + self.robot_goal_rect[3]), (255, 0, 0), 3)
 
-        for wall in self.walls[:-1]:
-            cv2.rectangle(self.img, (wall[0], wall[1]), (wall[0] + WALL_XLEN, wall[1] + WALL_YLEN), (0, 0, 0), -1)
+            # Display Human Goal
+            cv2.rectangle(self.img, (self.human_goal_rect[0], self.human_goal_rect[1]),
+                          (self.human_goal_rect[0] + self.human_goal_rect[2],
+                           self.human_goal_rect[1] + self.human_goal_rect[3]), (0, 0, 255), 3)
 
-        intent_wall = self.walls[self.intent]
-        x, y, w, h = intent_wall[0], intent_wall[1]-WALL_YLEN, WALL_XLEN, WALL_YLEN
-        sub_img = self.img[y:y + h, x:x + w]
-        intent_rect = np.zeros(sub_img.shape, dtype=np.uint8)
-        intent_rect[:, :, -1] = 255
+            for wall in self.walls[:-1]:
+                cv2.rectangle(self.img, (wall[0], wall[1]), (wall[0] + WALL_XLEN, wall[1] + WALL_YLEN), (0, 0, 0), -1)
 
-        res = cv2.addWeighted(sub_img, 0.5, intent_rect, 0.5, 1.0)
+            intent_wall = self.walls[self.intent]
+            x, y, w, h = intent_wall[0], intent_wall[1]-WALL_YLEN, WALL_XLEN, WALL_YLEN
+            sub_img = self.img[y:y + h, x:x + w]
+            intent_rect = np.zeros(sub_img.shape, dtype=np.uint8)
+            intent_rect[:, :, -1] = 255
 
-        # Putting the image back to its position
-        self.img[y:y + h, x:x + w] = res
+            res = cv2.addWeighted(sub_img, 0.5, intent_rect, 0.5, 1.0)
+
+            # Putting the image back to its position
+            self.img[y:y + h, x:x + w] = res
 
 
-        # Display human and robot
-        cv2.fillPoly(self.img, [human_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(0, 0, 255))
-        cv2.fillPoly(self.img, [robot_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(255, 0, 0))
+            # Display human and robot
+            cv2.fillPoly(self.img, [human_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(0, 0, 255))
+            cv2.fillPoly(self.img, [robot_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(255, 0, 0))
 
-        # Display the policy and intent
-        policy = self.intent #TODO: add a mechanism so we can still pick a policy when the intent is unknown
-        mode = self.intent
-        str = f"Running policy {policy} for intent {mode}"
-        cv2.putText(self.img, str, (1225, 25), self.font, 0.75, (0, 0, 0), 2, cv2.LINE_AA)
+            # Display the policy and intent
+            policy = self.intent #TODO: add a mechanism so we can still pick a policy when the intent is unknown
+            mode = self.intent
+            str = f"Running policy {policy} for intent {mode}"
+            cv2.putText(self.img, str, (1225, 25), self.font, 0.75, (0, 0, 0), 2, cv2.LINE_AA)
 
-        # Takes step after fixed time
-        t_end = time.time() + 0.05
-        k = -1
-        while time.time() < t_end:
-            if k == -1:
-                k = cv2.waitKey(1)
-            else:
-                continue
+            # Takes step after fixed time
+            t_end = time.time() + 0.05
+            k = -1
+            while time.time() < t_end:
+                if k == -1:
+                    k = cv2.waitKey(1)
+                else:
+                    continue
 
         self.robot_state = self.dynamics(state=self.robot_state, control=action[0])
         self.human_state = self.dynamics(state=self.human_state, control=action[0])
@@ -177,11 +182,11 @@ class HallwayEnv(gym.Env):
                 or distance_to_goal(self.robot_state, self.robot_goal_rect)[0] < 0 \
                 or self.timesteps >= TIMEOUT_TIMESTEPS \
                 or violated_dist:
-            font = cv2.FONT_HERSHEY_SIMPLEX
-            self.img = 255 - np.zeros((900, 1600, 3), dtype='uint8')
-            cv2.putText(self.img, 'Your Score is {}'.format(self.score), (140, 250), font, 1, (0, 0, 0), 2,
-                        cv2.LINE_AA)
             if self.render:
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                self.img = 255 - np.zeros((900, 1600, 3), dtype='uint8')
+                cv2.putText(self.img, 'Your Score is {}'.format(self.score), (140, 250), font, 1, (0, 0, 0), 2,
+                            cv2.LINE_AA)
                 cv2.imshow('Hallway Environment', self.img)
             self.done = True
 
