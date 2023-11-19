@@ -1,5 +1,5 @@
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 import numpy as np
 import cv2
 import random
@@ -13,7 +13,6 @@ RIGHT_BOUNDARY = 1600
 UPPER_BOUNDARY = 0
 LOWER_BOUNDARY = 900
 
-TIMEOUT_TIMESTEPS = 100
 WALL_XLEN = 800
 WALL_YLEN = 100
 
@@ -24,7 +23,7 @@ class HumanIntent(IntEnum):
     HALLWAY4 = 3
     HALLWAY5 = 4
 
-def collision_with_human(robot_position, human_position, eps=1):
+def collision_with_human(robot_position, human_position, eps=100):
     col = np.linalg.norm(robot_position[:2] - human_position[:2]) < eps
     return col
 
@@ -44,17 +43,22 @@ def wall_set_distance(walls, robot_pos):
     for wall_idx in range(len(walls)):
         wall_coord = walls[wall_idx]
         wall_left = wall_coord[0]
-        wall_right = wall_left + WALL_XLEN
+        wall_right = WALL_XLEN
         wall_up = wall_coord[1]
-        wall_down = wall_up + WALL_YLEN
+        wall_down = WALL_YLEN
 
         rect = (wall_left, wall_up, wall_right, wall_down)
-        signed_dist, _, _ = rect_set_dist(rect, robot_pos)
+        signed_dist, _ = rect_set_dist(rect, robot_pos)
         wall_dist.append(signed_dist)
     return np.array(wall_dist)
 
 def rect_set_dist(rect, pos):
-    (rect_left, rect_up, rect_right, rect_down) = rect
+    (rect_left, rect_up, drect_right, drect_down) = rect
+    rect_down = rect_up + drect_down
+    rect_right = rect_left + drect_right
+
+    # compute displacements (positive ==> on "this" side, e.g. dr>0 ==> on the right side, du>0 ==> above, etc.)
+    # if both components of an axis are negative (e.g. up and down), then pos is inside the rectangle on this axis
     dl = rect_left - pos[0]  # left displacement (positive => left of rectangle)
     dr = pos[0] - rect_right  # right distance (positive => right of rectangle)
     du = rect_up - pos[1]  # upper displacement (positive => above rectangle)
@@ -67,7 +71,7 @@ def rect_set_dist(rect, pos):
     disp_x = min(abs(dl), abs(dr))
     disp_y = min(abs(du), abs(dlow))
     signed_dist = dist_sign * (disp_x ** 2 + disp_y ** 2) ** (0.5)
-    return signed_dist, disp_x, disp_y
+    return signed_dist, (dl, dr, du, dlow)
 
 def rect_unpack_sides(rect):
     rect_left, rect_up, rect_right, rect_down = rect
@@ -88,26 +92,40 @@ def state_to_tripoints(pos, tripoints_bf):
 
 class HallwayEnv(gym.Env):
 
-    def __init__(self, render=False, state_dim=4, obs_seq_len=10, max_turning_rate=10, deterministic_intent=None):
+    def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=1, deterministic_intent=None,
+                 debug=False, render_mode="rgb_array", time_limit=100):
         super(HallwayEnv, self).__init__()
         # Define action and observation space
         # They must be gym.spaces objects
         # Example when using discrete actions:
         num_latent_vars = len(HumanIntent)
         self.num_latent_vars = num_latent_vars
+        self.max_turning_rate = max_turning_rate
         self.action_space = spaces.Box(low=-max_turning_rate, high=max_turning_rate, shape=(2,))
+        self.action_space = spaces.MultiDiscrete(nvec=[3, 3])
         self.obs_seq_len = obs_seq_len
         self.state_dim = state_dim
         self.full_obs_dim = self.state_dim + self.obs_seq_len*self.state_dim
-        self.observation_space = {"obs": spaces.Box(low=-500, high=500, shape=(self.full_obs_dim,), dtype=np.float32),
-                                  "mode": spaces.Discrete(self.num_latent_vars)}
+        self.observation_space = {"obs": spaces.Box(low=0, high=255, shape=(256, 256, 3), dtype=np.uint8),
+                                  "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)}
+        self.observation_space = {"obs": spaces.Box(low=-np.inf, high=np.inf, shape=(37,), dtype=np.float32),
+                                  "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)}
         self.observation_space = spaces.Dict(self.observation_space)
+        # self.observation_space = spaces.Box(low=0, high=255, shape=(256, 256, 3), dtype=np.uint8)
+        # self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(6,), dtype=np.float32)
         self.intent = None
         self.deterministic_intent = deterministic_intent
 
         self.font = cv2.FONT_HERSHEY_SIMPLEX
 
-        self.render = render
+        self.display_render = render
+        self.done = False
+        self.debug = debug
+        self.render_mode = render_mode
+        self.intent_seed = None
+        self.dist_robot = self.dist_human = 0
+        self.prev_dist_robot = self.prev_dist_human = 0
+        self.time_limit = time_limit
 
     def state_history_numpy(self):
         state_history = np.array(self.prev_states).flatten()
@@ -120,112 +138,89 @@ class HallwayEnv(gym.Env):
         wall_dist = wall_set_distance(self.walls, self.robot_state)
         human_wall_dist = wall_set_distance(self.walls, self.human_state)
 
-        robot_tripoints = state_to_tripoints(self.robot_state, self.robot_tripoints)
-        human_tripoints = state_to_tripoints(self.human_state, self.human_tripoints)
+        if self.display_render:
+            self.render()
 
-        if self.render:
-            cv2.imshow('Hallway Environment', self.img)
-            cv2.waitKey(1)
-            self.img = 255 - np.zeros((900, 1600, 3), dtype='uint8')
+        controls = np.array([-self.max_turning_rate, 0, self.max_turning_rate])
+        actions = [controls[a] for a in action]
+        self.robot_state = self.dynamics(state=self.robot_state, other_state=self.human_state, control=actions[0])
+        self.human_state = self.dynamics(state=self.human_state, other_state=self.robot_state, control=actions[1], is_human=True)
 
-            # Display Goal
-            cv2.rectangle(self.img, (self.robot_goal_rect[0], self.robot_goal_rect[1]),
-                          (self.robot_goal_rect[0] + self.robot_goal_rect[2],
-                           self.robot_goal_rect[1] + self.robot_goal_rect[3]), (255, 0, 0), 3)
-
-            # Display Human Goal
-            cv2.rectangle(self.img, (self.human_goal_rect[0], self.human_goal_rect[1]),
-                          (self.human_goal_rect[0] + self.human_goal_rect[2],
-                           self.human_goal_rect[1] + self.human_goal_rect[3]), (0, 0, 255), 3)
-
-            for wall in self.walls[:-1]:
-                cv2.rectangle(self.img, (wall[0], wall[1]), (wall[0] + WALL_XLEN, wall[1] + WALL_YLEN), (0, 0, 0), -1)
-
-            intent_wall = self.walls[self.intent]
-            x, y, w, h = intent_wall[0], intent_wall[1]-WALL_YLEN, WALL_XLEN, WALL_YLEN
-            sub_img = self.img[y:y + h, x:x + w]
-            intent_rect = np.zeros(sub_img.shape, dtype=np.uint8)
-            intent_rect[:, :, -1] = 255
-
-            res = cv2.addWeighted(sub_img, 0.5, intent_rect, 0.5, 1.0)
-
-            # Putting the image back to its position
-            self.img[y:y + h, x:x + w] = res
-
-
-            # Display human and robot
-            cv2.fillPoly(self.img, [human_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(0, 0, 255))
-            cv2.fillPoly(self.img, [robot_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(255, 0, 0))
-
-            # Display the policy and intent
-            policy = self.intent #TODO: add a mechanism so we can still pick a policy when the intent is unknown
-            mode = self.intent
-            str = f"Running policy {policy} for intent {mode}"
-            cv2.putText(self.img, str, (1225, 25), self.font, 0.75, (0, 0, 0), 2, cv2.LINE_AA)
-
-            # Takes step after fixed time
-            t_end = time.time() + 0.05
-            k = -1
-            while time.time() < t_end:
-                if k == -1:
-                    k = cv2.waitKey(1)
-                else:
-                    continue
-
-        self.robot_state = self.dynamics(state=self.robot_state, control=action[0])
-        self.human_state = self.dynamics(state=self.human_state, control=action[0])
-
-        # On collision, kill the trial and print the score
+        truncated = False
+        collision_penalty = 0
         violated_dist = any(wall_dist < 0) or any(human_wall_dist < 0)
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1 \
                 or collision_with_human(self.robot_state, self.human_state) \
-                or distance_to_goal(self.robot_state, self.robot_goal_rect)[0] < 0 \
-                or self.timesteps >= TIMEOUT_TIMESTEPS \
                 or violated_dist:
-            if self.render:
-                font = cv2.FONT_HERSHEY_SIMPLEX
-                self.img = 255 - np.zeros((900, 1600, 3), dtype='uint8')
-                cv2.putText(self.img, 'Your Score is {}'.format(self.score), (140, 250), font, 1, (0, 0, 0), 2,
-                            cv2.LINE_AA)
-                cv2.imshow('Hallway Environment', self.img)
+            self.done = False
+            collision_penalty = 0
+
+        if self.timesteps >= self.time_limit:
             self.done = True
+            truncated = True
 
-        signed_dist , _, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
-        signed_dist_human , _, _ = distance_to_goal(self.human_state, self.human_goal_rect)
-        self.total_reward = -signed_dist - signed_dist_human
-        self.reward = self.total_reward - self.prev_reward
-        self.prev_reward = self.total_reward
+        # Compute reward
+        human_intent_mismatch_penalty = 0
+        wall_coord = self.walls[self.intent]
+        wall_left = wall_coord[0]
+        wall_right = WALL_XLEN
+        wall_up = wall_coord[1]
+        wall_down = WALL_YLEN
+        rect = (wall_left, wall_up, wall_right, wall_down)
+        signed_dist, disp = rect_set_dist(rect, self.human_state[:2])
+        (dl, dr, du, dlow) = disp
+        if dl < 0 and dr < 0:
+            human_intent_mismatch_penalty = max(dlow, 0) + max(du, 0)
+            # if human_intent_mismatch_penalty > 0:
+            #     self.done = True
+        self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
+        self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
+        self.robot_distance = np.linalg.norm(self.robot_state[:2] - self.robot_goal_rect[:2])
+        self.human_distance = np.linalg.norm(self.human_state[:2] - self.human_goal_rect[:2])
+        self.reward = self.prev_dist_robot - self.robot_distance + self.prev_dist_human - self.human_distance
+        self.reward = self.reward / 100
+        #print(self.reward)
+        #self.reward += -human_intent_mismatch_penalty/1000 - collision_penalty
+        self.prev_reward = self.reward
+        self.prev_dist_robot = self.robot_distance
+        self.prev_dist_human = self.human_distance
 
-        if self.done:
-            self.reward = 0
-        if violated_dist:
-            self.reward = np.min(violated_dist)
+
         info = {}
 
-        _, pos_x, pos_y = distance_to_goal(self.robot_state, self.robot_goal_rect)
 
         human_delta_x = self.robot_state[0] - self.human_state[0]
         human_delta_y = self.robot_state[1] - self.human_state[1]
 
-        # create observation:
+        self.get_image(resolution_scale=1)
+        observation = cv2.resize(self.img, (256, 256))
+        human_delta = self.robot_state - self.human_state
+        human_wall_dist = wall_set_distance(self.walls, self.human_state)
+        robot_wall_dist = wall_set_distance(self.walls, self.robot_state)
+        self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
+        self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
+        observation = np.concatenate((human_delta, human_wall_dist, robot_wall_dist, self.robot_state, self.human_state, self.robot_goal_rect, self.human_goal_rect, self.walls.flatten()))
+        #observation = np.concatenate((self.robot_state, self.human_state))
+        observation = {"obs": observation, "mode": np.eye(5)[self.intent]}
 
-        self.prev_states.pop(0)  # pop the oldest observation
-        current_observation = [pos_x, pos_y, human_delta_x, human_delta_y]
-        self.prev_states.append(current_observation)
-        state_history = self.state_history_numpy()
-        observation = np.concatenate((current_observation, state_history), axis=-1)
-        observation = {"obs": observation, "mode": self.intent}
+        #cv2.imwrite('test.png', observation)
+        # from PIL import Image
+        # img = Image.fromarray(observation, 'RGB')
+        # img.save('try.png')
+        return observation, self.reward, self.done, truncated, info
 
-
-        return observation, self.reward, self.done, info
-
-    def reset(self):
+    def reset(self, seed=1234, options={}):
 
         if self.deterministic_intent is None:
             intent = np.random.choice(self.num_latent_vars)
         else:
             intent = self.deterministic_intent
 
+        if self.intent_seed:
+            intent = self.intent_seed
+
+        # if self.debug:
+        intent = 1
         self.intent = HumanIntent(intent)
 
 
@@ -240,14 +235,21 @@ class HallwayEnv(gym.Env):
                                 [400, 900]]) # include a "hidden" wall for visualizing the intent
 
         # Initial robot and human position
-        robot_position = np.array([random.randrange(1300, 1600), random.randrange(1, 900)])
-        robot_heading = np.random.uniform(low=0, high=2*np.pi)
+        if self.debug:
+            robot_position = np.array([1450, 450])
+            robot_heading = np.array(np.pi)
+        else:
+            robot_position = np.array([random.randrange(1300, 1500), random.randrange(300, 600)])
+            robot_heading = np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
         self.robot_state = np.array([robot_position[0], robot_position[1], robot_heading], dtype=np.float32)
         self.robot_tripoints = np.array([[0, 25], [-10, -25], [10, -25]])
 
-
-        human_position = np.array([random.randrange(1, 400), random.randrange(1, 900)])
-        human_heading = np.random.uniform(low=0, high=2*np.pi)
+        if self.debug:
+            human_position = np.array([200, 450])
+            human_heading = np.array(np.pi/3)
+        else:
+            human_position = np.array([random.randrange(100, 300), random.randrange(300, 600)])
+            human_heading = np.random.uniform(low=-np.pi/3, high=np.pi/3)
         self.human_state = np.array([human_position[0], human_position[1], human_heading], dtype=np.float32)
         self.human_tripoints = np.array([[0, 25], [-10, -25], [10, -25]])
 
@@ -262,32 +264,45 @@ class HallwayEnv(gym.Env):
         self.prev_button_direction = 1
         self.button_direction = 1
 
-        self.prev_reward = 0
+        self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
+        self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
+        self.prev_dist_robot = self.dist_robot
+        self.prev_dist_human = self.dist_human
 
         self.done = False
 
-        pos_x = self.robot_state[0]
-        pos_y = self.robot_state[1]
-
-        human_delta_x = self.human_state[0] - pos_x
-        human_delta_y = self.human_state[1] - pos_y
+        _, disp = distance_to_goal(self.human_state, self.human_goal_rect)
 
         self.prev_states= []  # short state history to incorporate some memory in the policy
         for i in range(self.obs_seq_len):
             self.prev_states.append([0] * self.state_dim)  # to create history
 
-        state_history = self.state_history_numpy()
+        self.reward = - np.linalg.norm(self.robot_state[:2] - self.robot_goal_rect[:2]) - np.linalg.norm(self.human_state[:2] - self.human_goal_rect[:2])
+        self.reward = self.reward / 1000
+        #print(self.reward)
+        self.prev_reward = self.reward
 
-        # create observation:
-        observation = np.concatenate(([pos_x, pos_y, human_delta_x, human_delta_y], state_history), axis=-1)
-        observation = {"obs": observation, "mode": self.intent}
+        self.get_image(resolution_scale=1)
+        observation = cv2.resize(self.img, (256, 256))
+        human_delta = self.robot_state - self.human_state
+        human_wall_dist = wall_set_distance(self.walls, self.human_state)
+        robot_wall_dist = wall_set_distance(self.walls, self.robot_state)
+        self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
+        self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
+        observation = np.concatenate((human_delta, human_wall_dist, robot_wall_dist, self.robot_state, self.human_state, self.robot_goal_rect, self.human_goal_rect, self.walls.flatten()))
+        # observation = np.concatenate((self.robot_state, self.human_state))
+        observation = {"obs": observation, "mode": np.eye(5)[self.intent]}
 
-        return observation
+        return observation, {}
 
-    def dynamics(self, state, control):
-        return self.dubins_car(state, control)
+    def seed_intent(self, intent):
+        self.intent = intent
+        self.intent_seed = intent
 
-    def dubins_car(self, state, control, dt=0.1, V=100, turning_rate_scale=0.1):
+    def dynamics(self, state, other_state, control, is_human=False):
+        return self.dubins_car(state, other_state, control, is_human=is_human)
+
+    def dubins_car(self, state, other_state, control, is_human=False, dt=0.1, V=100, turning_rate_scale=1):
 
         # Unitless -> rad/s
         turning_rate_modifier = 2 * np.pi * turning_rate_scale
@@ -302,7 +317,45 @@ class HallwayEnv(gym.Env):
         
         xnew = x + dx*dt
         ynew = y - dy*dt
-        thetanew = (theta + turning_rate_modifier * dtheta * dt)
+
+        # Don't allow collisions, but allow the robot to turn around.
+        new_state = np.array([xnew, ynew])
+        wall_dist = wall_set_distance(self.walls, new_state)
+        violated_dist = any(wall_dist < 0)
+        if collision_with_boundaries(new_state) == 1 or violated_dist or collision_with_human(new_state, other_state):
+
+
+            new_state_x = np.array([xnew, y])
+            new_state_y = np.array([x, ynew])
+            wall_dist_x = wall_set_distance(self.walls, new_state_x)
+            violated_dist_x = any(wall_dist_x < 0)
+            wall_dist_y = wall_set_distance(self.walls, new_state_y)
+            violated_dist_y = any(wall_dist_y < 0)
+            if not(collision_with_boundaries(new_state_x) == 1 or violated_dist_x or collision_with_human(new_state_x, other_state)):
+                ynew = y
+            elif not(collision_with_boundaries(new_state_y) == 1 or violated_dist_y or collision_with_human(new_state_y, other_state)):
+                xnew = x
+            else:
+                xnew = x
+                ynew = y
+
+
+        # If agent is human, insure the intent is satisfied
+        wall_coord = self.walls[self.intent]
+        wall_left = wall_coord[0]
+        wall_right = WALL_XLEN
+        wall_up = wall_coord[1] - WALL_YLEN
+        wall_down = wall_up + WALL_YLEN
+        rect = (wall_left, wall_up, wall_right, wall_down)
+        signed_dist, disp = rect_set_dist(rect, self.human_state[:2])
+        (dl, dr, du, dlow) = disp
+        # if dl < 0 and dr < 0:
+        #     human_intent_mismatch = max(dlow, 0) + max(du, 0)
+        #     if is_human and human_intent_mismatch > 0:
+        #         xnew = x
+        #         ynew = y
+
+        thetanew = (theta + dtheta * dt)
         if thetanew > 2*np.pi:
             thetanew = thetanew - 2*np.pi
         elif thetanew < 0:
@@ -310,4 +363,78 @@ class HallwayEnv(gym.Env):
 
         
         return np.array([xnew, ynew, thetanew])
+
+    def get_image(self, resolution_scale):
+        robot_tripoints = state_to_tripoints(self.robot_state, self.robot_tripoints)*resolution_scale
+        human_tripoints = state_to_tripoints(self.human_state, self.human_tripoints)*resolution_scale
+
+        self.img = 255 - np.zeros((900*resolution_scale, 1600*resolution_scale, 3), dtype='uint8')
+
+        # Display Goal
+        cv2.rectangle(self.img, (self.robot_goal_rect[0]*resolution_scale, self.robot_goal_rect[1]*resolution_scale),
+                      (self.robot_goal_rect[0]*resolution_scale + self.robot_goal_rect[2]*resolution_scale,
+                       self.robot_goal_rect[1]*resolution_scale + self.robot_goal_rect[3]*resolution_scale),
+                      (255, 0, 0), 3)
+
+        # Display Human Goal
+        cv2.rectangle(self.img, (self.human_goal_rect[0]*resolution_scale, self.human_goal_rect[1]*resolution_scale),
+                      (self.human_goal_rect[0]*resolution_scale + self.human_goal_rect[2]*resolution_scale,
+                       self.human_goal_rect[1]*resolution_scale + self.human_goal_rect[3]*resolution_scale),
+                      (0, 0, 255), 3)
+
+        # Display Robot Boundary
+        cv2.circle(self.img, (int(self.robot_state[0]), int(self.robot_state[1])), 50, (255, 0, 0), thickness=1, lineType=8, shift=0)
+
+        # Display Human Boundary
+        cv2.circle(self.img, (int(self.human_state[0]), int(self.human_state[1])), 50, (0, 0, 255), thickness=1, lineType=8, shift=0)
+
+
+        # Display Human Boundary
+
+        for wall in self.walls[:-1]:
+            cv2.rectangle(self.img, (wall[0]*resolution_scale, wall[1]*resolution_scale),
+                          (wall[0]*resolution_scale + WALL_XLEN*resolution_scale,
+                           wall[1]*resolution_scale + WALL_YLEN*resolution_scale), (0, 0, 0), -1)
+
+        intent_wall = self.walls[self.intent]
+        x, y, w, h = (intent_wall[0]*resolution_scale, intent_wall[1]*resolution_scale - WALL_YLEN*resolution_scale,
+                      WALL_XLEN*resolution_scale, WALL_YLEN*resolution_scale)
+        sub_img = self.img[y:y + h, x:x + w]
+        intent_rect = np.zeros(sub_img.shape, dtype=np.uint8)
+        intent_rect[:, :, -1] = 255
+
+        res = cv2.addWeighted(sub_img, 0.5, intent_rect, 0.5, 1.0)
+
+        # Putting the image back to its position
+        # self.img[y:y + h, x:x + w] = res
+
+        # Display human and robot
+        cv2.fillPoly(self.img, [human_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(0, 0, 255))
+        cv2.fillPoly(self.img, [robot_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(255, 0, 0))
+        cv2.waitKey(1)
+
+    def render(self, resolution_scale=1):
+
+        self.get_image(resolution_scale)
+
+        # Display the policy and intent
+        mode = self.intent
+        str = f"Human intent: hallway {mode}"
+        cv2.putText(self.img, str, (1300*resolution_scale, 25*resolution_scale),
+                    self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
+
+        if self.display_render:
+            self.img = cv2.resize(self.img, (960, 540))
+            cv2.imshow('Hallway Environment', self.img)
+            cv2.waitKey(1)
+
+        # Takes step after fixed time
+        t_end = time.time() + 0.05
+        k = -1
+        while time.time() < t_end:
+            if k == -1:
+                k = cv2.waitKey(1)
+            else:
+                continue
+        return self.img
         

@@ -3,7 +3,7 @@ import numpy as np
 
 from environments.hallway_env import HallwayEnv
 
-def make_env(rank, seed=0, render=False):
+def make_env(rank, seed=0, render=False,debug=False, time_limit=100):
     """
     Utility function for multiprocessed env.
 
@@ -13,7 +13,7 @@ def make_env(rank, seed=0, render=False):
     :param rank: (int) index of the subprocess
     """
     def _init():
-        env = HallwayEnv(render=render)
-        env.seed(seed + rank)
+        env = HallwayEnv(render=render, debug=debug, time_limit=time_limit)
+        #penv.reset(seed=seed + rank)
         return env
     return _init
