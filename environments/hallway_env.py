@@ -13,7 +13,7 @@ RIGHT_BOUNDARY = 1600
 UPPER_BOUNDARY = 0
 LOWER_BOUNDARY = 900
 
-WALL_XLEN = 800
+WALL_XLEN = 400
 WALL_YLEN = 100
 
 class HumanIntent(IntEnum):
@@ -113,16 +113,17 @@ class HallwayEnv(gym.Env):
         num_latent_vars = len(HumanIntent)
         self.num_latent_vars = num_latent_vars
         self.max_turning_rate = max_turning_rate
-        # self.action_space = spaces.Box(low=-max_turning_rate, high=max_turning_rate, shape=(1,))
-        self.action_space = spaces.MultiDiscrete(nvec=[3, 3])
+        self.action_space = spaces.Box(low=-max_turning_rate, high=max_turning_rate, shape=(2,))
+        # self.action_space = spaces.MultiDiscrete(nvec=[3, 3])
         self.obs_seq_len = obs_seq_len
         self.state_dim = state_dim
         self.full_obs_dim = self.state_dim + self.obs_seq_len*self.state_dim
         self.observation_space = {"obs": spaces.Box(low=0, high=255, shape=(256, 256, 3), dtype=np.uint8),
-                                  "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)}
-        self.observation_space = {"obs": spaces.Box(low=-np.inf, high=np.inf, shape=(19,), dtype=np.float32),
                                   "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32),
                                   "agent": spaces.Box(low=0, high=1, shape=(2,), dtype=np.float32)}
+        self.observation_space = {"obs": spaces.Box(low=-np.inf, high=np.inf, shape=(18,), dtype=np.float32),
+                                  "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)}
+                                  # "agent": spaces.Box(low=0, high=1, shape=(2,), dtype=np.float32)}
         self.observation_space = spaces.Dict(self.observation_space)
         # self.observation_space = spaces.Box(low=0, high=255, shape=(256, 256, 3), dtype=np.uint8)
         # self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(6,), dtype=np.float32)
@@ -156,21 +157,36 @@ class HallwayEnv(gym.Env):
         if self.display_render:
             self.render()
 
-        controls = np.array([-self.max_turning_rate, 0, self.max_turning_rate])
-        actions = [controls[a] for a in action]
+        # controls = np.array([-self.max_turning_rate, 0, self.max_turning_rate])
+        # actions = [controls[a] for a in action]
+        actions = action
         self.robot_state = self.dynamics(state=self.robot_state, other_state=self.human_state, control=actions[0])
         self.human_state = self.dynamics(state=self.human_state, other_state=self.robot_state, control=actions[1], is_human=True)
 
         truncated = False
         collision_penalty = 0
+        wall_coord = self.walls[self.intent]
+        wall_left = wall_coord[0]
+        wall_right = WALL_XLEN
+        wall_up = wall_coord[1] - WALL_YLEN
+        wall_down = wall_up + WALL_YLEN
+        rect = (wall_left, wall_up, WALL_XLEN, WALL_YLEN)
+        wrong_hallway = self.intent_violation(self.human_state, rect)
+
         violated_dist = any(wall_dist <= 10) or any(human_wall_dist <= 10)
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1 \
-                or collision_with_human(self.robot_state, self.human_state) \
                 or violated_dist:
             self.done = False
-            collision_penalty = 0.1
+            collision_penalty = 0.05
+
+        if collision_with_human(self.robot_state, self.human_state):
+            collision_penalty = 1
 
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1:
+            self.done = False
+            collision_penalty = 0.05
+
+        if wrong_hallway:
             self.done = True
 
         if self.timesteps >= self.time_limit:
@@ -209,13 +225,21 @@ class HallwayEnv(gym.Env):
         self.get_image(resolution_scale=1)
         observation = cv2.resize(self.img, (256, 256))
         human_delta = self.robot_state - self.human_state
+        human_delta_pos = np.linalg.norm(human_delta[:2])
+        human_delta_bearing = np.arctan2(human_delta[0], human_delta[1])
         human_wall_dist = wall_set_distance(self.walls, self.human_state)
         robot_wall_dist = wall_set_distance(self.walls, self.robot_state)
         self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
         self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
-        observation = np.concatenate((human_delta, human_wall_dist, robot_wall_dist, self.robot_state[:-1], self.human_state[:-1], np.array([self.dist_robot, self.dist_human])))
+        observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing*100]),
+                                     human_wall_dist, robot_wall_dist,
+                                     human_wall_dist[self.intent:self.intent+1],
+                                     robot_wall_dist[self.intent:self.intent+1],
+                                     self.robot_state[-1:]*100, self.human_state[-1:]*100,
+                                     np.array([self.dist_robot, self.dist_human])))
+        observation /= 100
         #observation = np.concatenate((self.robot_state, self.human_state))
-        observation = {"obs": observation, "mode": np.eye(5)[self.intent], "agent": np.eye(2)[self.learning_agent]}
+        observation = {"obs": observation, "mode": np.eye(5)[self.intent]}
 
         #cv2.imwrite('test.png', observation)
         # from PIL import Image
@@ -240,7 +264,7 @@ class HallwayEnv(gym.Env):
             intent = self.intent_seed
 
         # if self.debug:
-        intent = 1
+        # intent = 1
         self.intent = HumanIntent(intent)
 
 
@@ -248,11 +272,11 @@ class HallwayEnv(gym.Env):
         self.timesteps = 0
 
         # Hallway boundaries. Top left corner.
-        self.walls = np.array([[400, 100],
-                                [400, 300],
-                                [400, 500],
-                                [400, 700],
-                                [400, 900]]) # include a "hidden" wall for visualizing the intent
+        self.walls = np.array([[600, 100],
+                                [600, 300],
+                                [600, 500],
+                                [600, 700],
+                                [600, 900]]) # include a "hidden" wall for visualizing the intent
 
         # Initial robot and human position
         if self.debug:
@@ -306,14 +330,22 @@ class HallwayEnv(gym.Env):
         self.get_image(resolution_scale=1)
         observation = cv2.resize(self.img, (256, 256))
         human_delta = self.robot_state - self.human_state
+        human_delta_pos = np.linalg.norm(human_delta[:2])
+        human_delta_bearing = np.arctan2(human_delta[0], human_delta[1])
         human_wall_dist = wall_set_distance(self.walls, self.human_state)
         robot_wall_dist = wall_set_distance(self.walls, self.robot_state)
         self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
         self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
-        observation = np.concatenate((human_delta, human_wall_dist, robot_wall_dist, self.robot_state[:-1], self.human_state[:-1], np.array([self.dist_robot, self.dist_human])))
+        observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing*100]),
+                                     human_wall_dist, robot_wall_dist,
+                                     human_wall_dist[self.intent:self.intent+1],
+                                     robot_wall_dist[self.intent:self.intent+1],
+                                     self.robot_state[-1:]*100, self.human_state[-1:]*100,
+                                     np.array([self.dist_robot, self.dist_human])))
+        observation /= 100
         #print(observation.shape)
         # observation = np.concatenate((self.robot_state, self.human_state))
-        observation = {"obs": observation, "mode": np.eye(5)[self.intent], "agent": np.eye(2)[self.learning_agent]}
+        observation = {"obs": observation, "mode": np.eye(5)[self.intent]}
 
         return observation, {}
 
@@ -347,29 +379,21 @@ class HallwayEnv(gym.Env):
         wall_up = wall_coord[1] - WALL_YLEN
         wall_down = wall_up + WALL_YLEN
         rect = (wall_left, wall_up, WALL_XLEN, WALL_YLEN)
-        def intent_violation(pstate):
-            signed_dist, disp = rect_set_dist(rect, pstate)
-            (dl, dr, du, dlow) = disp
-            if dl < 0 and dr < 0:
-                human_intent_mismatch = max(dlow, 0) + max(du, 0)
-                if is_human and human_intent_mismatch > 0:
-                    return False
-                else:
-                    return False
+
         new_state = np.array([xnew, ynew])
         wall_dist = wall_set_distance(self.walls, new_state)
         violated_dist = any(wall_dist <= 0)
         valid_transition = True
-        if violated_dist or collision_with_human(new_state, other_state) or intent_violation(new_state):
+        if collision_with_boundaries(new_state) or violated_dist or collision_with_human(new_state, other_state): #or intent_violation(new_state):
             new_state_x = np.array([xnew, y])
             new_state_y = np.array([x, ynew])
             wall_dist_x = wall_set_distance(self.walls, new_state_x)
             violated_dist_x = any(wall_dist_x <= 0)
             wall_dist_y = wall_set_distance(self.walls, new_state_y)
             violated_dist_y = any(wall_dist_y <= 0)
-            if not(collision_with_boundaries(new_state_x) == 1 or violated_dist_x or collision_with_human(new_state_x, other_state) or intent_violation(new_state_x)):
+            if not(collision_with_boundaries(new_state_x) == 1 or violated_dist_x or collision_with_human(new_state_x, other_state)):# or intent_violation(new_state_x)):
                 ynew = y
-            elif not(collision_with_boundaries(new_state_y) == 1 or violated_dist_y or collision_with_human(new_state_y, other_state) or intent_violation(new_state_y)):
+            elif not(collision_with_boundaries(new_state_y) == 1 or violated_dist_y or collision_with_human(new_state_y, other_state)):# or intent_violation(new_state_y)):
                 xnew = x
             else:
                 xnew = x
@@ -385,6 +409,19 @@ class HallwayEnv(gym.Env):
 
         
         return np.array([xnew, ynew, thetanew])
+
+    def intent_violation(self, pstate, rect, is_human=True):
+        if not is_human:
+            return False
+
+        signed_dist, disp = rect_set_dist(rect, pstate)
+        (dl, dr, du, dlow) = disp
+        if dl < 0 and dr < 0:
+            human_intent_mismatch = max(dlow, 0) + max(du, 0)
+            if is_human and human_intent_mismatch > 0:
+                return True
+            else:
+                return False
 
     def get_image(self, resolution_scale):
         robot_tripoints = state_to_tripoints(self.robot_state, self.robot_tripoints)*resolution_scale

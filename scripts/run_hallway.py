@@ -1,12 +1,13 @@
 import numpy as np
-from stable_baselines3 import PPO, MultiModalPPO
+from stable_baselines3 import PPO, SAC #, MultiModalPPO
+from sb3_contrib import RecurrentPPO
 from environments.hallway_env import HallwayEnv
 from environments.make_vectorized_hallway_env import make_env
 import os
 import time
 
 from gymnasium.envs.registration import register
-from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv, VecFrameStack
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env.vec_monitor import VecMonitor
 from stable_baselines3.common.utils import obs_as_tensor, safe_mean
@@ -27,19 +28,21 @@ debug = False
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
     episodes = 1
-    num_cpu = 8  # Number of processes to use
-    max_steps = 100
-    learn_steps = 2500
+    num_cpu = 64  # Number of processes to use
+    max_steps = 200
+    learn_steps = 10000
     save_freq = 100000
     n_iters=1000
-    video_length=100
+    video_length=200
     timesteps = max_steps
 
     # Create the vectorized environment
     env = SubprocVecEnv([make_env(i, render=render, debug=debug, time_limit=max_steps) for i in range(num_cpu)])
+    # env = VecFrameStack(env, n_stack=4)
     env = VecMonitor(env, logdir + "log")
     videnv = HallwayEnv(render=render, debug=debug, time_limit=max_steps)
     videnv = DummyVecEnv([lambda: videnv])
+    # videnv = VecFrameStack(videnv, n_stack=4)
     videnv = VecVideoRecorder(videnv, video_folder=logdir, record_video_trigger=lambda x: True, video_length=video_length)
 
     wandb.init(
@@ -47,7 +50,9 @@ if __name__ == ("__main__"):
     )
 
     print('Training Policy.')
-    model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir, n_steps=100, n_epochs=5, learning_rate=1e-4)
+    policy_kwargs = dict(net_arch=dict(pi=[64, 64], vf=[64, 64]))
+    model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir, n_steps=100, n_epochs=5, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs)
+    # model = SAC('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir, learning_rate=1e-4, gamma=0.999)
 
     callback = SaveOnBestTrainingRewardCallback(check_freq=save_freq, log_dir=logdir)
 
@@ -67,7 +72,7 @@ if __name__ == ("__main__"):
         training_dict["time/epochs"] = iter
         training_dict["time/mean_episode_length"] = ep_mean_len
 
-        if iter % 10 == 0:
+        if iter % 25 == 0:
             record_video(videnv, model, video_length=video_length)
 
         wandb.log(training_dict)
