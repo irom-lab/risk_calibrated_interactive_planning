@@ -23,6 +23,10 @@ class HumanIntent(IntEnum):
     HALLWAY4 = 3
     HALLWAY5 = 4
 
+class LearningAgent(IntEnum):
+    HUMAN=0 # Red
+    ROBOT=1 # Blue
+
 def collision_with_human(robot_position, human_position, eps=100):
     col = np.linalg.norm(robot_position[:2] - human_position[:2]) < eps
     return col
@@ -32,8 +36,8 @@ def distance_to_goal(pos, goal_rect):
 
 
 def collision_with_boundaries(robot_pos):
-    if robot_pos[0] < LEFT_BOUNDARY or robot_pos[0] >= RIGHT_BOUNDARY or \
-            robot_pos[1] <= UPPER_BOUNDARY or robot_pos[1] > LOWER_BOUNDARY:
+    if robot_pos[0] <= LEFT_BOUNDARY or robot_pos[0] >= RIGHT_BOUNDARY or \
+            robot_pos[1] <= UPPER_BOUNDARY or robot_pos[1] >= LOWER_BOUNDARY:
         return 1
     else:
         return 0
@@ -70,7 +74,15 @@ def rect_set_dist(rect, pos):
     dist_sign = -1 if inside else 1
     disp_x = min(abs(dl), abs(dr))
     disp_y = min(abs(du), abs(dlow))
-    signed_dist = dist_sign * (disp_x ** 2 + disp_y ** 2) ** (0.5)
+
+    if inside_x_coord and not inside_y_coord:
+        signed_dist = dist_sign * disp_y
+    elif inside_y_coord and not inside_x_coord:
+        signed_dist = dist_sign * disp_x
+    elif inside_x_coord and inside_y_coord:
+        signed_dist = 0
+    else:
+        signed_dist = dist_sign * (disp_x ** 2 + disp_y ** 2) ** (0.5)
     return signed_dist, (dl, dr, du, dlow)
 
 def rect_unpack_sides(rect):
@@ -101,7 +113,7 @@ class HallwayEnv(gym.Env):
         num_latent_vars = len(HumanIntent)
         self.num_latent_vars = num_latent_vars
         self.max_turning_rate = max_turning_rate
-        self.action_space = spaces.Box(low=-max_turning_rate, high=max_turning_rate, shape=(2,))
+        # self.action_space = spaces.Box(low=-max_turning_rate, high=max_turning_rate, shape=(1,))
         self.action_space = spaces.MultiDiscrete(nvec=[3, 3])
         self.obs_seq_len = obs_seq_len
         self.state_dim = state_dim
@@ -109,7 +121,8 @@ class HallwayEnv(gym.Env):
         self.observation_space = {"obs": spaces.Box(low=0, high=255, shape=(256, 256, 3), dtype=np.uint8),
                                   "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)}
         self.observation_space = {"obs": spaces.Box(low=-np.inf, high=np.inf, shape=(37,), dtype=np.float32),
-                                  "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)}
+                                  "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32),
+                                  "agent": spaces.Box(low=0, high=1, shape=(2,), dtype=np.float32)}
         self.observation_space = spaces.Dict(self.observation_space)
         # self.observation_space = spaces.Box(low=0, high=255, shape=(256, 256, 3), dtype=np.uint8)
         # self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(6,), dtype=np.float32)
@@ -126,6 +139,8 @@ class HallwayEnv(gym.Env):
         self.dist_robot = self.dist_human = 0
         self.prev_dist_robot = self.prev_dist_human = 0
         self.time_limit = time_limit
+        self.learning_agent = LearningAgent.HUMAN
+        self.cumulative_reward = 0
 
     def state_history_numpy(self):
         state_history = np.array(self.prev_states).flatten()
@@ -148,12 +163,15 @@ class HallwayEnv(gym.Env):
 
         truncated = False
         collision_penalty = 0
-        violated_dist = any(wall_dist < 0) or any(human_wall_dist < 0)
+        violated_dist = any(wall_dist <= 10) or any(human_wall_dist <= 10)
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1 \
                 or collision_with_human(self.robot_state, self.human_state) \
                 or violated_dist:
             self.done = False
-            collision_penalty = 0
+            collision_penalty = 0.1
+
+        if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1:
+            self.done = True
 
         if self.timesteps >= self.time_limit:
             self.done = True
@@ -161,29 +179,24 @@ class HallwayEnv(gym.Env):
 
         # Compute reward
         human_intent_mismatch_penalty = 0
-        wall_coord = self.walls[self.intent]
-        wall_left = wall_coord[0]
-        wall_right = WALL_XLEN
-        wall_up = wall_coord[1]
-        wall_down = WALL_YLEN
-        rect = (wall_left, wall_up, wall_right, wall_down)
-        signed_dist, disp = rect_set_dist(rect, self.human_state[:2])
-        (dl, dr, du, dlow) = disp
-        if dl < 0 and dr < 0:
-            human_intent_mismatch_penalty = max(dlow, 0) + max(du, 0)
-            # if human_intent_mismatch_penalty > 0:
-            #     self.done = True
         self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
         self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
         self.robot_distance = np.linalg.norm(self.robot_state[:2] - self.robot_goal_rect[:2])
         self.human_distance = np.linalg.norm(self.human_state[:2] - self.human_goal_rect[:2])
-        self.reward = self.prev_dist_robot - self.robot_distance + self.prev_dist_human - self.human_distance
-        self.reward = self.reward / 100
+        if self.learning_agent == LearningAgent.HUMAN:
+            self.reward = self.prev_dist_human - self.dist_human
+            self.reward = np.sign(self.reward)
+        else:
+            self.reward = self.prev_dist_robot - self.dist_robot
+            self.reward = np.sign(self.reward)
+        # self.reward = self.reward / 100
         #print(self.reward)
-        #self.reward += -human_intent_mismatch_penalty/1000 - collision_penalty
+        self.reward += - collision_penalty
         self.prev_reward = self.reward
-        self.prev_dist_robot = self.robot_distance
-        self.prev_dist_human = self.human_distance
+        self.prev_dist_robot = self.dist_robot
+        self.prev_dist_human = self.dist_human
+
+        self.cumulative_reward += self.reward
 
 
         info = {}
@@ -201,7 +214,7 @@ class HallwayEnv(gym.Env):
         self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
         observation = np.concatenate((human_delta, human_wall_dist, robot_wall_dist, self.robot_state, self.human_state, self.robot_goal_rect, self.human_goal_rect, self.walls.flatten()))
         #observation = np.concatenate((self.robot_state, self.human_state))
-        observation = {"obs": observation, "mode": np.eye(5)[self.intent]}
+        observation = {"obs": observation, "mode": np.eye(5)[self.intent], "agent": np.eye(2)[self.learning_agent]}
 
         #cv2.imwrite('test.png', observation)
         # from PIL import Image
@@ -210,6 +223,12 @@ class HallwayEnv(gym.Env):
         return observation, self.reward, self.done, truncated, info
 
     def reset(self, seed=1234, options={}):
+
+        learning_agent = np.random.choice(2)
+        if learning_agent == LearningAgent.ROBOT:
+            self.learning_agent = LearningAgent.ROBOT
+        else:
+            self.learning_agent = LearningAgent.HUMAN
 
         if self.deterministic_intent is None:
             intent = np.random.choice(self.num_latent_vars)
@@ -281,6 +300,7 @@ class HallwayEnv(gym.Env):
         self.reward = self.reward / 1000
         #print(self.reward)
         self.prev_reward = self.reward
+        self.cumulative_reward = 0
 
         self.get_image(resolution_scale=1)
         observation = cv2.resize(self.img, (256, 256))
@@ -291,7 +311,7 @@ class HallwayEnv(gym.Env):
         self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
         observation = np.concatenate((human_delta, human_wall_dist, robot_wall_dist, self.robot_state, self.human_state, self.robot_goal_rect, self.human_goal_rect, self.walls.flatten()))
         # observation = np.concatenate((self.robot_state, self.human_state))
-        observation = {"obs": observation, "mode": np.eye(5)[self.intent]}
+        observation = {"obs": observation, "mode": np.eye(5)[self.intent], "agent": np.eye(2)[self.learning_agent]}
 
         return observation, {}
 
@@ -319,41 +339,41 @@ class HallwayEnv(gym.Env):
         ynew = y - dy*dt
 
         # Don't allow collisions, but allow the robot to turn around.
-        new_state = np.array([xnew, ynew])
-        wall_dist = wall_set_distance(self.walls, new_state)
-        violated_dist = any(wall_dist < 0)
-        if collision_with_boundaries(new_state) == 1 or violated_dist or collision_with_human(new_state, other_state):
-
-
-            new_state_x = np.array([xnew, y])
-            new_state_y = np.array([x, ynew])
-            wall_dist_x = wall_set_distance(self.walls, new_state_x)
-            violated_dist_x = any(wall_dist_x < 0)
-            wall_dist_y = wall_set_distance(self.walls, new_state_y)
-            violated_dist_y = any(wall_dist_y < 0)
-            if not(collision_with_boundaries(new_state_x) == 1 or violated_dist_x or collision_with_human(new_state_x, other_state)):
-                ynew = y
-            elif not(collision_with_boundaries(new_state_y) == 1 or violated_dist_y or collision_with_human(new_state_y, other_state)):
-                xnew = x
-            else:
-                xnew = x
-                ynew = y
-
-
-        # If agent is human, insure the intent is satisfied
         wall_coord = self.walls[self.intent]
         wall_left = wall_coord[0]
         wall_right = WALL_XLEN
         wall_up = wall_coord[1] - WALL_YLEN
         wall_down = wall_up + WALL_YLEN
-        rect = (wall_left, wall_up, wall_right, wall_down)
-        signed_dist, disp = rect_set_dist(rect, self.human_state[:2])
-        (dl, dr, du, dlow) = disp
-        # if dl < 0 and dr < 0:
-        #     human_intent_mismatch = max(dlow, 0) + max(du, 0)
-        #     if is_human and human_intent_mismatch > 0:
-        #         xnew = x
-        #         ynew = y
+        rect = (wall_left, wall_up, WALL_XLEN, WALL_YLEN)
+        def intent_violation(pstate):
+            signed_dist, disp = rect_set_dist(rect, pstate)
+            (dl, dr, du, dlow) = disp
+            if dl < 0 and dr < 0:
+                human_intent_mismatch = max(dlow, 0) + max(du, 0)
+                if is_human and human_intent_mismatch > 0:
+                    return True
+                else:
+                    return False
+        new_state = np.array([xnew, ynew])
+        wall_dist = wall_set_distance(self.walls, new_state)
+        violated_dist = any(wall_dist <= 0)
+        valid_transition = True
+        if violated_dist or collision_with_human(new_state, other_state) or intent_violation(new_state):
+            new_state_x = np.array([xnew, y])
+            new_state_y = np.array([x, ynew])
+            wall_dist_x = wall_set_distance(self.walls, new_state_x)
+            violated_dist_x = any(wall_dist_x <= 0)
+            wall_dist_y = wall_set_distance(self.walls, new_state_y)
+            violated_dist_y = any(wall_dist_y <= 0)
+            if not(collision_with_boundaries(new_state_x) == 1 or violated_dist_x or collision_with_human(new_state_x, other_state) or intent_violation(new_state_x)):
+                ynew = y
+            elif not(collision_with_boundaries(new_state_y) == 1 or violated_dist_y or collision_with_human(new_state_y, other_state) or intent_violation(new_state_y)):
+                xnew = x
+            else:
+                xnew = x
+                ynew = y
+            valid_transition = False
+
 
         thetanew = (theta + dtheta * dt)
         if thetanew > 2*np.pi:
@@ -421,6 +441,18 @@ class HallwayEnv(gym.Env):
         mode = self.intent
         str = f"Human intent: hallway {mode}"
         cv2.putText(self.img, str, (1300*resolution_scale, 25*resolution_scale),
+                    self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
+
+        str = f"Cumulative reward: {self.cumulative_reward}"
+        cv2.putText(self.img, str, (1300*resolution_scale, 50*resolution_scale),
+                    self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
+
+        if self.learning_agent == LearningAgent.HUMAN:
+            la_str = "Red"
+        else:
+            la_str = "Blue"
+        str = f"Learning agent: {la_str}"
+        cv2.putText(self.img, str, (1300*resolution_scale, 75*resolution_scale),
                     self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
 
         if self.display_render:

@@ -27,9 +27,9 @@ debug = False
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
     episodes = 1
-    num_cpu = 32 # Number of processes to use
+    num_cpu = 16 # Number of processes to use
     max_steps = 100
-    learn_steps = max_steps*num_cpu*5
+    learn_steps = 25000
     save_freq = 100000
     n_iters=1000
     video_length=100
@@ -38,7 +38,7 @@ if __name__ == ("__main__"):
     # Create the vectorized environment
     env = SubprocVecEnv([make_env(i, render=render, debug=debug, time_limit=max_steps) for i in range(num_cpu)])
     env = VecMonitor(env, logdir + "log")
-    videnv = HallwayEnv(render=False, debug=debug, time_limit=max_steps)
+    videnv = HallwayEnv(render=render, debug=debug, time_limit=max_steps)
     videnv = DummyVecEnv([lambda: videnv])
     videnv = VecVideoRecorder(videnv, video_folder=logdir, record_video_trigger=lambda x: True, video_length=video_length)
 
@@ -47,7 +47,7 @@ if __name__ == ("__main__"):
     )
 
     print('Training Policy.')
-    model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir)
+    model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir, n_steps=101)
 
     callback = SaveOnBestTrainingRewardCallback(check_freq=save_freq, log_dir=logdir)
 

@@ -2,6 +2,7 @@ import gym
 import numpy as np
 
 from environments.hallway_env import HallwayEnv
+from stable_baselines3.common.utils import set_random_seed
 
 def make_env(rank, seed=0, render=False,debug=False, time_limit=100):
     """
@@ -16,4 +17,5 @@ def make_env(rank, seed=0, render=False,debug=False, time_limit=100):
         env = HallwayEnv(render=render, debug=debug, time_limit=time_limit)
         #penv.reset(seed=seed + rank)
         return env
+    set_random_seed(seed)
     return _init
