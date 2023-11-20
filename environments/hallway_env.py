@@ -120,7 +120,7 @@ class HallwayEnv(gym.Env):
         self.full_obs_dim = self.state_dim + self.obs_seq_len*self.state_dim
         self.observation_space = {"obs": spaces.Box(low=0, high=255, shape=(256, 256, 3), dtype=np.uint8),
                                   "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)}
-        self.observation_space = {"obs": spaces.Box(low=-np.inf, high=np.inf, shape=(37,), dtype=np.float32),
+        self.observation_space = {"obs": spaces.Box(low=-np.inf, high=np.inf, shape=(19,), dtype=np.float32),
                                   "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32),
                                   "agent": spaces.Box(low=0, high=1, shape=(2,), dtype=np.float32)}
         self.observation_space = spaces.Dict(self.observation_space)
@@ -189,7 +189,8 @@ class HallwayEnv(gym.Env):
         else:
             self.reward = self.prev_dist_robot - self.dist_robot
             self.reward = np.sign(self.reward)
-        # self.reward = self.reward / 100
+        self.reward = self.prev_dist_human - self.dist_human + self.prev_dist_robot - self.dist_robot
+        self.reward = self.reward / 100
         #print(self.reward)
         self.reward += - collision_penalty
         self.prev_reward = self.reward
@@ -212,7 +213,7 @@ class HallwayEnv(gym.Env):
         robot_wall_dist = wall_set_distance(self.walls, self.robot_state)
         self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
         self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
-        observation = np.concatenate((human_delta, human_wall_dist, robot_wall_dist, self.robot_state, self.human_state, self.robot_goal_rect, self.human_goal_rect, self.walls.flatten()))
+        observation = np.concatenate((human_delta, human_wall_dist, robot_wall_dist, self.robot_state[:-1], self.human_state[:-1], np.array([self.dist_robot, self.dist_human])))
         #observation = np.concatenate((self.robot_state, self.human_state))
         observation = {"obs": observation, "mode": np.eye(5)[self.intent], "agent": np.eye(2)[self.learning_agent]}
 
@@ -309,7 +310,8 @@ class HallwayEnv(gym.Env):
         robot_wall_dist = wall_set_distance(self.walls, self.robot_state)
         self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
         self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
-        observation = np.concatenate((human_delta, human_wall_dist, robot_wall_dist, self.robot_state, self.human_state, self.robot_goal_rect, self.human_goal_rect, self.walls.flatten()))
+        observation = np.concatenate((human_delta, human_wall_dist, robot_wall_dist, self.robot_state[:-1], self.human_state[:-1], np.array([self.dist_robot, self.dist_human])))
+        #print(observation.shape)
         # observation = np.concatenate((self.robot_state, self.human_state))
         observation = {"obs": observation, "mode": np.eye(5)[self.intent], "agent": np.eye(2)[self.learning_agent]}
 
@@ -351,7 +353,7 @@ class HallwayEnv(gym.Env):
             if dl < 0 and dr < 0:
                 human_intent_mismatch = max(dlow, 0) + max(du, 0)
                 if is_human and human_intent_mismatch > 0:
-                    return True
+                    return False
                 else:
                     return False
         new_state = np.array([xnew, ynew])

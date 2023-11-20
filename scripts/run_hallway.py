@@ -27,9 +27,9 @@ debug = False
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
     episodes = 1
-    num_cpu = 16 # Number of processes to use
+    num_cpu = 8  # Number of processes to use
     max_steps = 100
-    learn_steps = 25000
+    learn_steps = 2500
     save_freq = 100000
     n_iters=1000
     video_length=100
@@ -47,7 +47,7 @@ if __name__ == ("__main__"):
     )
 
     print('Training Policy.')
-    model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir, n_steps=101)
+    model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir, n_steps=100, n_epochs=5, learning_rate=1e-4)
 
     callback = SaveOnBestTrainingRewardCallback(check_freq=save_freq, log_dir=logdir)
 
