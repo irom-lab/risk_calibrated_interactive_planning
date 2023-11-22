@@ -68,7 +68,7 @@ if __name__ == ("__main__"):
     print('Training Policy.')
     policy_kwargs = dict(net_arch=dict(pi=[64, 64], vf=[64, 64]))
     model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir,
-                n_steps=max_steps, n_epochs=5, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs)
+                n_steps=max_steps, n_epochs=2, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs)
     # model = SAC('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir, learning_rate=1e-4, gamma=0.999)
 
     callback = SaveOnBestTrainingRewardCallback(check_freq=save_freq, log_dir=logdir)
