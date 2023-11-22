@@ -15,4 +15,4 @@ module purge
 module load anaconda3/2023.9
 conda activate crl2
 
-python run_hallway.py
+python /home/jlidard/PredictiveRL/scripts/run_hallway.py
