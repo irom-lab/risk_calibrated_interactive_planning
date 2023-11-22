@@ -105,7 +105,7 @@ def state_to_tripoints(pos, tripoints_bf):
 class HallwayEnv(gym.Env):
 
     def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=1, deterministic_intent=None,
-                 debug=False, render_mode="rgb_array", time_limit=100):
+                 debug=False, render_mode="rgb_array", time_limit=100, rgb_observation=False):
         super(HallwayEnv, self).__init__()
         # Define action and observation space
         # They must be gym.spaces objects
@@ -118,11 +118,13 @@ class HallwayEnv(gym.Env):
         self.obs_seq_len = obs_seq_len
         self.state_dim = state_dim
         self.full_obs_dim = self.state_dim + self.obs_seq_len*self.state_dim
-        self.observation_space = {"obs": spaces.Box(low=0, high=255, shape=(256, 256, 3), dtype=np.uint8),
-                                  "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32),
-                                  "agent": spaces.Box(low=0, high=1, shape=(2,), dtype=np.float32)}
-        self.observation_space = {"obs": spaces.Box(low=-np.inf, high=np.inf, shape=(18,), dtype=np.float32),
-                                  "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)}
+        self.rgb_observation = rgb_observation
+        if self.rgb_observation:
+            self.observation_space = {"obs": spaces.Box(low=0, high=255, shape=(256, 256, 3), dtype=np.uint8),
+                                      "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)}
+        else:
+            self.observation_space = {"obs": spaces.Box(low=-np.inf, high=np.inf, shape=(18,), dtype=np.float32),
+                                      "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)}
                                   # "agent": spaces.Box(low=0, high=1, shape=(2,), dtype=np.float32)}
         self.observation_space = spaces.Dict(self.observation_space)
         # self.observation_space = spaces.Box(low=0, high=255, shape=(256, 256, 3), dtype=np.uint8)
@@ -222,29 +224,29 @@ class HallwayEnv(gym.Env):
         human_delta_x = self.robot_state[0] - self.human_state[0]
         human_delta_y = self.robot_state[1] - self.human_state[1]
 
-        self.get_image(resolution_scale=1)
-        observation = cv2.resize(self.img, (256, 256))
-        human_delta = self.robot_state - self.human_state
-        human_delta_pos = np.linalg.norm(human_delta[:2])
-        human_delta_bearing = np.arctan2(human_delta[0], human_delta[1])
-        human_wall_dist = wall_set_distance(self.walls, self.human_state)
-        robot_wall_dist = wall_set_distance(self.walls, self.robot_state)
-        self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
-        self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
-        observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing*100]),
-                                     human_wall_dist, robot_wall_dist,
-                                     human_wall_dist[self.intent:self.intent+1],
-                                     robot_wall_dist[self.intent:self.intent+1],
-                                     self.robot_state[-1:]*100, self.human_state[-1:]*100,
-                                     np.array([self.dist_robot, self.dist_human])))
-        observation /= 100
+        if self.rgb_observation:
+            self.get_image(resolution_scale=1)
+            observation = cv2.resize(self.img, (256, 256))
+        else:
+            human_delta = self.robot_state - self.human_state
+            human_delta_pos = np.linalg.norm(human_delta[:2])
+            human_delta_bearing = np.arctan2(human_delta[0], human_delta[1])
+            human_wall_dist = wall_set_distance(self.walls, self.human_state)
+            robot_wall_dist = wall_set_distance(self.walls, self.robot_state)
+            self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
+            self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
+            observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing*100]),
+                                         human_wall_dist, robot_wall_dist,
+                                         human_wall_dist[self.intent:self.intent+1],
+                                         robot_wall_dist[self.intent:self.intent+1],
+                                         self.robot_state[-1:]*100, self.human_state[-1:]*100,
+                                         np.array([self.dist_robot, self.dist_human])))
+            observation /= 100
         #observation = np.concatenate((self.robot_state, self.human_state))
         observation = {"obs": observation, "mode": np.eye(5)[self.intent]}
 
         #cv2.imwrite('test.png', observation)
-        # from PIL import Image
-        # img = Image.fromarray(observation, 'RGB')
-        # img.save('try.png')
+
         return observation, self.reward, self.done, truncated, info
 
     def reset(self, seed=1234, options={}):
@@ -327,25 +329,34 @@ class HallwayEnv(gym.Env):
         self.prev_reward = self.reward
         self.cumulative_reward = 0
 
-        self.get_image(resolution_scale=1)
-        observation = cv2.resize(self.img, (256, 256))
-        human_delta = self.robot_state - self.human_state
-        human_delta_pos = np.linalg.norm(human_delta[:2])
-        human_delta_bearing = np.arctan2(human_delta[0], human_delta[1])
-        human_wall_dist = wall_set_distance(self.walls, self.human_state)
-        robot_wall_dist = wall_set_distance(self.walls, self.robot_state)
-        self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
-        self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
-        observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing*100]),
-                                     human_wall_dist, robot_wall_dist,
-                                     human_wall_dist[self.intent:self.intent+1],
-                                     robot_wall_dist[self.intent:self.intent+1],
-                                     self.robot_state[-1:]*100, self.human_state[-1:]*100,
-                                     np.array([self.dist_robot, self.dist_human])))
-        observation /= 100
+        if self.rgb_observation:
+            self.get_image(resolution_scale=1)
+            observation = cv2.resize(self.img, (256, 256))
+        else:
+            human_delta = self.robot_state - self.human_state
+            human_delta_pos = np.linalg.norm(human_delta[:2])
+            human_delta_bearing = np.arctan2(human_delta[0], human_delta[1])
+            human_wall_dist = wall_set_distance(self.walls, self.human_state)
+            robot_wall_dist = wall_set_distance(self.walls, self.robot_state)
+            self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
+            self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
+            observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing*100]),
+                                         human_wall_dist, robot_wall_dist,
+                                         human_wall_dist[self.intent:self.intent+1],
+                                         robot_wall_dist[self.intent:self.intent+1],
+                                         self.robot_state[-1:]*100, self.human_state[-1:]*100,
+                                         np.array([self.dist_robot, self.dist_human])))
+            observation /= 100
         #print(observation.shape)
         # observation = np.concatenate((self.robot_state, self.human_state))
         observation = {"obs": observation, "mode": np.eye(5)[self.intent]}
+
+        # from PIL import Image
+        # img = Image.fromarray(observation["obs"], 'RGB')
+        # img.save('try.png')
+        # import time
+        # print("something")
+        # time.sleep(10)
 
         return observation, {}
 
@@ -465,7 +476,7 @@ class HallwayEnv(gym.Env):
         res = cv2.addWeighted(sub_img, 0.5, intent_rect, 0.5, 1.0)
 
         # Putting the image back to its position
-        # self.img[y:y + h, x:x + w] = res
+        self.img[y:y + h, x:x + w] = res
 
         # Display human and robot
         cv2.fillPoly(self.img, [human_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(0, 0, 255))

@@ -1,6 +1,6 @@
 import numpy as np
 from stable_baselines3 import PPO, SAC #, MultiModalPPO
-from sb3_contrib import RecurrentPPO
+#from sb3_contrib import RecurrentPPO
 from environments.hallway_env import HallwayEnv
 from environments.make_vectorized_hallway_env import make_env
 import os
@@ -18,17 +18,26 @@ from stable_baselines3.common.vec_env.vec_video_recorder import VecVideoRecorder
 
 from record_video import record_video
 
+from os.path import expanduser
+
 import wandb
+from wandb_osh.hooks import TriggerWandbSyncHook  # <-- New!
+
+trigger_sync = TriggerWandbSyncHook()  # <--- New!
+
+home = expanduser("~")
 
 models_dir = f"../models/{int(time.time())}/"
-logdir = f"/home/jlidard/PredictiveRL/logs/{int(time.time())}/"
+logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
 
 render = False
 debug = False
+rgb_observation = True
+online = False
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
     episodes = 1
-    num_cpu = 64  # Number of processes to use
+    num_cpu = 8  # Number of processes to use
     max_steps = 200
     learn_steps = 10000
     save_freq = 100000
@@ -37,21 +46,29 @@ if __name__ == ("__main__"):
     timesteps = max_steps
 
     # Create the vectorized environment
-    env = SubprocVecEnv([make_env(i, render=render, debug=debug, time_limit=max_steps) for i in range(num_cpu)])
+    env = SubprocVecEnv([make_env(i, render=render, debug=debug,
+                                  time_limit=max_steps, rgb_observation=rgb_observation) for i in range(num_cpu)])
     # env = VecFrameStack(env, n_stack=4)
     env = VecMonitor(env, logdir + "log")
-    videnv = HallwayEnv(render=render, debug=debug, time_limit=max_steps)
+    videnv = HallwayEnv(render=render, debug=debug, time_limit=max_steps, rgb_observation=rgb_observation)
     videnv = DummyVecEnv([lambda: videnv])
     # videnv = VecFrameStack(videnv, n_stack=4)
     videnv = VecVideoRecorder(videnv, video_folder=logdir, record_video_trigger=lambda x: True, video_length=video_length)
 
-    wandb.init(
-        project="conformal_rl",
-    )
+    if online:
+        wandb.init(
+            project="conformal_rl",
+        )
+    else:
+        wandb.init(
+            project="conformal_rl",
+            mode="offline"
+        )
 
     print('Training Policy.')
     policy_kwargs = dict(net_arch=dict(pi=[64, 64], vf=[64, 64]))
-    model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir, n_steps=100, n_epochs=5, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs)
+    model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir,
+                n_steps=max_steps, n_epochs=5, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs)
     # model = SAC('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir, learning_rate=1e-4, gamma=0.999)
 
     callback = SaveOnBestTrainingRewardCallback(check_freq=save_freq, log_dir=logdir)
@@ -76,4 +93,6 @@ if __name__ == ("__main__"):
             record_video(videnv, model, video_length=video_length)
 
         wandb.log(training_dict)
+        if not online:
+            trigger_sync()  # <-- New!
     print("...Done.")
