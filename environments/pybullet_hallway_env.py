@@ -14,14 +14,13 @@ from pybullet_utils import bullet_client as bc
 import pybullet_data
 from pkg_resources import parse_version
 
-SNAKE_LEN_GOAL = 30
-LEFT_BOUNDARY = 0
-RIGHT_BOUNDARY = 1600
-UPPER_BOUNDARY = 0
-LOWER_BOUNDARY = 900
+LEFT_BOUNDARY = -5
+RIGHT_BOUNDARY = 5
+UPPER_BOUNDARY = 5
+LOWER_BOUNDARY = -5
 
-WALL_XLEN = 400
-WALL_YLEN = 100
+WALL_XLEN = 2
+WALL_YLEN = 1
 
 class HumanIntent(IntEnum):
     HALLWAY1 = 0
@@ -34,7 +33,7 @@ class LearningAgent(IntEnum):
     HUMAN=0 # Red
     ROBOT=1 # Blue
 
-def collision_with_human(robot_position, human_position, eps=100):
+def collision_with_human(robot_position, human_position, eps=0.5):
     col = np.linalg.norm(robot_position[:2] - human_position[:2]) < eps
     return col
 
@@ -44,7 +43,7 @@ def distance_to_goal(pos, goal_rect):
 
 def collision_with_boundaries(robot_pos):
     if robot_pos[0] <= LEFT_BOUNDARY or robot_pos[0] >= RIGHT_BOUNDARY or \
-            robot_pos[1] <= UPPER_BOUNDARY or robot_pos[1] >= LOWER_BOUNDARY:
+            robot_pos[1] <= LOWER_BOUNDARY or robot_pos[1] >= UPPER_BOUNDARY:
         return 1
     else:
         return 0
@@ -72,8 +71,8 @@ def rect_set_dist(rect, pos):
     # if both components of an axis are negative (e.g. up and down), then pos is inside the rectangle on this axis
     dl = rect_left - pos[0]  # left displacement (positive => left of rectangle)
     dr = pos[0] - rect_right  # right distance (positive => right of rectangle)
-    du = rect_up - pos[1]  # upper displacement (positive => above rectangle)
-    dlow = pos[1] - rect_down  # lower displacement (positive => below rectangle)
+    du = pos[1] - rect_up # upper displacement (positive => above rectangle)
+    dlow = rect_down - pos[1]  # lower displacement (positive => below rectangle)
 
     inside_x_coord = dl <= 0 and dr <= 0
     inside_y_coord = du <= 0 and dlow <= 0
@@ -98,23 +97,13 @@ def rect_unpack_sides(rect):
     rect_down += rect_up
     return (rect_left, rect_up, rect_right, rect_down)
 
-def state_to_tripoints(pos, tripoints_bf):
-    heading = pos[-1] - np.pi/2
-    rot_mat = np.array([[np.cos(heading), -np.sin(heading)],
-                       [np.sin(heading), np.cos(heading)]])
-    new_tripoints = rot_mat @ tripoints_bf.T
-    new_tripoints = new_tripoints.T
-    new_tripoints[:, 1] *= -1
-    return new_tripoints + pos[:2]
 
-
-
-class HallwayEnv(gym.Env):
+class BulletHallwayEnv(gym.Env):
 
     def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=1, deterministic_intent=None,
                  debug=False, render_mode="rgb_array", time_limit=100, rgb_observation=False,
                  urdfRoot=pybullet_data.getDataPath()):
-        super(HallwayEnv, self).__init__()
+        super(BulletHallwayEnv, self).__init__()
 
         self.urdfRoot = urdfRoot
 
@@ -123,17 +112,23 @@ class HallwayEnv(gym.Env):
         else:
             self.p = bc.BulletClient()
 
+        self.p.resetSimulation()
+
+        self.p.setGravity(0, 0, -9.8)
+
         self.plane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf", [0, 0, 0],
                    [0, 0, 0, 1])
         wall1 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, -3, 0], [0, 0, 0, 1],
                            useFixedBase=True)
-        wall2 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 2, 0], [0, 0, 0, 1],
+        wall2 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, -1, 0], [0, 0, 0, 1],
                            useFixedBase=True)
-        wall3 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 4, 0], [0, 0, 0, 1],
+        wall3 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 1, 0], [0, 0, 0, 1],
                            useFixedBase=True)
-        wall4 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 6, 0], [0, 0, 0, 1],
+        wall4 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 3, 0], [0, 0, 0, 1],
                            useFixedBase=True)
         self.wall_assets = [wall1, wall2, wall3, wall4]
+        self.robot = None
+        self.human = None
 
         # Define action and observation space
         # They must be gym.spaces objects
@@ -279,9 +274,7 @@ class HallwayEnv(gym.Env):
 
     def reset(self, seed=1234, options={}):
 
-        self.racecar = racecar.Racecar(self.p, urdfRootPath=self.urdfRoot, timeStep=self.timeStep)
-        for i in range(100):
-            self.p.stepSimulation()
+        self.timesteps = 0
 
         learning_agent = np.random.choice(2)
         if learning_agent == LearningAgent.ROBOT:
@@ -303,36 +296,49 @@ class HallwayEnv(gym.Env):
 
 
         self.img = 255 - np.zeros((900, 1600, 3), dtype='uint8')
-        self.timesteps = 0
 
         # Hallway boundaries. Top left corner.
-        self.walls = np.array([[-1, -0.5],
+        self.walls = np.array([[-1, -2.5],
+                                [-1, -0.5],
                                 [-1, 1.5],
                                 [-1, 3.5],
-                                [-1, 5.5],
-                                [-1, 7.5]]) # include a "hidden" wall for visualizing the intent
+                                [-1, 5.5]]) # include a "hidden" wall for visualizing the intent
 
         # Initial robot and human position
         if self.debug:
-            robot_position = np.array([2, 0])
-            robot_heading = np.array(np.pi)
+            robot_position = np.array([4, 0])
+            robot_heading = np.pi + np.array(np.pi)
         else:
             robot_position = np.array([random.randrange(1300, 1500), random.randrange(300, 600)])
-            robot_heading = np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
+            robot_heading = np.pi + np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
         self.robot_state = np.array([robot_position[0], robot_position[1], robot_heading], dtype=np.float32)
         self.robot_tripoints = np.array([[0, 25], [-10, -25], [10, -25]])
 
         if self.debug:
-            human_position = np.array([-2, 0])
-            human_heading = np.array(np.pi/3)
+            human_position = np.array([-4, 0])
+            human_heading = np.pi + np.array(np.pi/3)
         else:
             human_position = np.array([random.randrange(100, 300), random.randrange(300, 600)])
-            human_heading = np.random.uniform(low=-np.pi/3, high=np.pi/3)
+            human_heading = np.pi + np.random.uniform(low=-np.pi/3, high=np.pi/3)
         self.human_state = np.array([human_position[0], human_position[1], human_heading], dtype=np.float32)
 
+        human_orientation = self.p.getQuaternionFromEuler([0, 0, human_heading])
+        robot_orientation = self.p.getQuaternionFromEuler([0, 0, robot_heading])
+        self.human = racecar.Racecar(self.p, urdfRootPath=self.urdfRoot, timeStep=self.timesteps,
+                                     pos=(human_position[0],human_position[1],0.2),
+                                     orientation=human_orientation)
+        self.robot = racecar.Racecar(self.p, urdfRootPath=self.urdfRoot, timeStep=self.timesteps,
+                                     pos=(robot_position[0],robot_position[1],0.2),
+                                     orientation=robot_orientation)
+        for i in range(100):
+            self.p.stepSimulation()
+
+        self.human_state = self.get_state(self.human.racecarUniqueId)
+        self.robot_state = self.get_state(self.robot.racecarUniqueId)
+
         # Goals
-        self.robot_goal_rect = np.array([100, 300, 200, 300])
-        self.human_goal_rect = np.array([1300, 300, 200, 300])
+        self.robot_goal_rect = np.array([-4, 2, 2, 4])
+        self.human_goal_rect = np.array([2, 2, 2, 4])
         self.score = 0
         self.prev_button_direction = 1
         self.button_direction = 1
@@ -351,7 +357,7 @@ class HallwayEnv(gym.Env):
             self.prev_states.append([0] * self.state_dim)  # to create history
 
         self.reward = - np.linalg.norm(self.robot_state[:2] - self.robot_goal_rect[:2]) - np.linalg.norm(self.human_state[:2] - self.human_goal_rect[:2])
-        self.reward = self.reward / 1000
+        self.reward = self.reward
         #print(self.reward)
         self.prev_reward = self.reward
         self.cumulative_reward = 0
@@ -367,13 +373,12 @@ class HallwayEnv(gym.Env):
             robot_wall_dist = wall_set_distance(self.walls, self.robot_state)
             self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
             self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
-            observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing*100]),
+            observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing]),
                                          human_wall_dist, robot_wall_dist,
                                          human_wall_dist[self.intent:self.intent+1],
                                          robot_wall_dist[self.intent:self.intent+1],
-                                         self.robot_state[-1:]*100, self.human_state[-1:]*100,
+                                         self.robot_state[-1:], self.human_state[-1:],
                                          np.array([self.dist_robot, self.dist_human])))
-            observation /= 100
         #print(observation.shape)
         # observation = np.concatenate((self.robot_state, self.human_state))
         observation = {"obs": observation, "mode": np.eye(5)[self.intent]}
@@ -386,6 +391,13 @@ class HallwayEnv(gym.Env):
         # time.sleep(10)
 
         return observation, {}
+
+    def get_state(self, agentid):
+        pos_orientation = self.p.getBasePositionAndOrientation(agentid)
+        p, o = pos_orientation
+        o_eul = self.p.getEulerFromQuaternion(o)
+        state = [p[0], p[1], o_eul[-1]]
+        return state
 
     def seed_intent(self, intent):
         self.intent = intent
