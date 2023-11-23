@@ -19,6 +19,9 @@ RIGHT_BOUNDARY = 5
 UPPER_BOUNDARY = 5
 LOWER_BOUNDARY = -5
 
+RENDER_HEIGHT = 720
+RENDER_WIDTH = 960
+
 WALL_XLEN = 2
 WALL_YLEN = 1
 
@@ -185,20 +188,26 @@ class BulletHallwayEnv(gym.Env):
         # controls = np.array([-self.max_turning_rate, 0, self.max_turning_rate])
         # actions = [controls[a] for a in action]
         actions = action
-        self.robot_state = self.dynamics(state=self.robot_state, other_state=self.human_state, control=actions[0])
-        self.human_state = self.dynamics(state=self.human_state, other_state=self.robot_state, control=actions[1], is_human=True)
+        targetvel = 1
+        robot_action = np.array(targetvel, action[0])
+        human_action = np.array(targetvel, action[1])
+        self.robot.applyAction(robot_action)
+        self.human.applyAction(human_action)
+
+        self.human_state = self.get_state(self.human.racecarUniqueId)
+        self.robot_state = self.get_state(self.robot.racecarUniqueId)
 
         truncated = False
         collision_penalty = 0
         wall_coord = self.walls[self.intent]
         wall_left = wall_coord[0]
         wall_right = WALL_XLEN
-        wall_up = wall_coord[1] - WALL_YLEN
-        wall_down = wall_up + WALL_YLEN
+        wall_up = wall_coord[1] + WALL_YLEN
+        wall_down = wall_up - WALL_YLEN
         rect = (wall_left, wall_up, WALL_XLEN, WALL_YLEN)
         wrong_hallway = self.intent_violation(self.human_state, rect)
 
-        violated_dist = any(wall_dist <= 10) or any(human_wall_dist <= 10)
+        violated_dist = any(wall_dist <= 0.25) or any(human_wall_dist <= 0.25)
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1 \
                 or violated_dist:
             self.done = False
@@ -397,7 +406,7 @@ class BulletHallwayEnv(gym.Env):
         p, o = pos_orientation
         o_eul = self.p.getEulerFromQuaternion(o)
         state = [p[0], p[1], o_eul[-1]]
-        return state
+        return np.array(state)
 
     def seed_intent(self, intent):
         self.intent = intent
@@ -522,40 +531,26 @@ class BulletHallwayEnv(gym.Env):
         cv2.fillPoly(self.img, [robot_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(255, 0, 0))
         cv2.waitKey(1)
 
-    def render(self, resolution_scale=1):
-
-        self.get_image(resolution_scale)
-
-        # Display the policy and intent
-        mode = self.intent
-        str = f"Human intent: hallway {mode}"
-        cv2.putText(self.img, str, (1300*resolution_scale, 25*resolution_scale),
-                    self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
-
-        str = f"Cumulative reward: {self.cumulative_reward}"
-        cv2.putText(self.img, str, (1300*resolution_scale, 50*resolution_scale),
-                    self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
-
-        if self.learning_agent == LearningAgent.HUMAN:
-            la_str = "Red"
-        else:
-            la_str = "Blue"
-        str = f"Learning agent: {la_str}"
-        cv2.putText(self.img, str, (1300*resolution_scale, 75*resolution_scale),
-                    self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
-
-        if self.display_render:
-            self.img = cv2.resize(self.img, (960, 540))
-            cv2.imshow('Hallway Environment', self.img)
-            cv2.waitKey(1)
-
-        # Takes step after fixed time
-        t_end = time.time() + 0.05
-        k = -1
-        while time.time() < t_end:
-            if k == -1:
-                k = cv2.waitKey(1)
-            else:
-                continue
-        return self.img
+    def render(self, mode='human', close=False):
+        if mode != "rgb_array":
+            return np.array([])
+        base_pos, orn = self.p.getBasePositionAndOrientation(self.robot.racecarUniqueId)
+        view_matrix = self.p.computeViewMatrixFromYawPitchRoll(cameraTargetPosition=base_pos,
+                                                                # distance=self._cam_dist,
+                                                                # yaw=self._cam_yaw,
+                                                                # pitch=self._cam_pitch,
+                                                                roll=0,
+                                                                upAxisIndex=2)
+        proj_matrix = self.p.computeProjectionMatrixFOV(fov=60,
+                                                         aspect=float(RENDER_WIDTH) / RENDER_HEIGHT,
+                                                         nearVal=0.1,
+                                                         farVal=100.0)
+        (_, _, px, _, _) = self.p.getCameraImage(width=RENDER_WIDTH,
+                                                  height=RENDER_HEIGHT,
+                                                  viewMatrix=view_matrix,
+                                                  projectionMatrix=proj_matrix,
+                                                  renderer=pybullet.ER_BULLET_HARDWARE_OPENGL)
+        rgb_array = np.array(px)
+        rgb_array = rgb_array[:, :, :3]
+        return rgb_array
         

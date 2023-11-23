@@ -25,4 +25,7 @@ from environments.pybullet_hallway_env import BulletHallwayEnv
 env = BulletHallwayEnv(render=True, debug=True)
 env.reset()
 
+for _ in range(100):
+    env.step([0.5, 0.5])
+
 time.sleep(30)
