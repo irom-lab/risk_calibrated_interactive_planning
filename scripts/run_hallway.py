@@ -37,7 +37,7 @@ online = False
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
     episodes = 1
-    num_cpu = 128  # Number of processes to use
+    num_cpu = 64  # Number of processes to use
     max_steps = 200
     learn_steps = 12800
     save_freq = 100000

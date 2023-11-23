@@ -7,6 +7,13 @@ import time
 from enum import IntEnum
 from collections import deque
 
+import pybullet
+from . import racecar
+import random
+from pybullet_utils import bullet_client as bc
+import pybullet_data
+from pkg_resources import parse_version
+
 SNAKE_LEN_GOAL = 30
 LEFT_BOUNDARY = 0
 RIGHT_BOUNDARY = 1600
