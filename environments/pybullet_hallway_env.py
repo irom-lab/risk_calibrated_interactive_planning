@@ -125,7 +125,7 @@ class HallwayEnv(gym.Env):
 
         self.plane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf", [0, 0, 0],
                    [0, 0, 0, 1])
-        wall1 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 0, 0], [0, 0, 0, 1],
+        wall1 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, -3, 0], [0, 0, 0, 1],
                            useFixedBase=True)
         wall2 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 2, 0], [0, 0, 0, 1],
                            useFixedBase=True)
