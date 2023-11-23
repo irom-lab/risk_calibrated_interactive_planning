@@ -4,6 +4,10 @@ import pybullet_data
 from arm_env import ArmEnv
 import time
 
+import racecar
+
+urdfRoot=pybullet_data.getDataPath()
+
 p.connect(p.GUI)
 p.resetSimulation()
 p.setAdditionalSearchPath(pybullet_data.getDataPath())
@@ -17,7 +21,11 @@ wall2 = p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 2, 0
 wall3 = p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 4, 0], [0, 0, 0, 1], useFixedBase=True)
 wall4 = p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 6, 0], [0, 0, 0, 1], useFixedBase=True)
 
-robot = p.loadURDF("sphere2.urdf", [0, -2, 0], [0, 0, 0, 1], useFixedBase=True)
+goal1 = p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 6, 0], [0, 0, 0, 1], useFixedBase=True)
+goal2 = p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 6, 0], [0, 0, 0, 1], useFixedBase=True)
+
+#robot = p.loadURDF("sphere2.urdf", [0, -2, 0], [0, 0, 0, 1], useFixedBase=True)
+racecar = racecar.Racecar(p, urdfRootPath=urdfRoot, timeStep=0)
 
 
 

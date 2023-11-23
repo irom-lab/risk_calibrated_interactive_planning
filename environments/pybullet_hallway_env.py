@@ -112,8 +112,29 @@ def state_to_tripoints(pos, tripoints_bf):
 class HallwayEnv(gym.Env):
 
     def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=1, deterministic_intent=None,
-                 debug=False, render_mode="rgb_array", time_limit=100, rgb_observation=False):
+                 debug=False, render_mode="rgb_array", time_limit=100, rgb_observation=False,
+                 urdfRoot=pybullet_data.getDataPath()):
         super(HallwayEnv, self).__init__()
+
+        self.urdfRoot = urdfRoot
+
+        if render:
+            self.p = bc.BulletClient(connection_mode=pybullet.GUI)
+        else:
+            self.p = bc.BulletClient()
+
+        self.plane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf", [0, 0, 0],
+                   [0, 0, 0, 1])
+        wall1 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 0, 0], [0, 0, 0, 1],
+                           useFixedBase=True)
+        wall2 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 2, 0], [0, 0, 0, 1],
+                           useFixedBase=True)
+        wall3 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 4, 0], [0, 0, 0, 1],
+                           useFixedBase=True)
+        wall4 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 6, 0], [0, 0, 0, 1],
+                           useFixedBase=True)
+        self.wall_assets = [wall1, wall2, wall3, wall4]
+
         # Define action and observation space
         # They must be gym.spaces objects
         # Example when using discrete actions:
@@ -258,6 +279,10 @@ class HallwayEnv(gym.Env):
 
     def reset(self, seed=1234, options={}):
 
+        self.racecar = racecar.Racecar(self.p, urdfRootPath=self.urdfRoot, timeStep=self.timeStep)
+        for i in range(100):
+            self.p.stepSimulation()
+
         learning_agent = np.random.choice(2)
         if learning_agent == LearningAgent.ROBOT:
             self.learning_agent = LearningAgent.ROBOT
@@ -281,15 +306,15 @@ class HallwayEnv(gym.Env):
         self.timesteps = 0
 
         # Hallway boundaries. Top left corner.
-        self.walls = np.array([[600, 100],
-                                [600, 300],
-                                [600, 500],
-                                [600, 700],
-                                [600, 900]]) # include a "hidden" wall for visualizing the intent
+        self.walls = np.array([[-1, -0.5],
+                                [-1, 1.5],
+                                [-1, 3.5],
+                                [-1, 5.5],
+                                [-1, 7.5]]) # include a "hidden" wall for visualizing the intent
 
         # Initial robot and human position
         if self.debug:
-            robot_position = np.array([1450, 450])
+            robot_position = np.array([2, 0])
             robot_heading = np.array(np.pi)
         else:
             robot_position = np.array([random.randrange(1300, 1500), random.randrange(300, 600)])
@@ -298,17 +323,12 @@ class HallwayEnv(gym.Env):
         self.robot_tripoints = np.array([[0, 25], [-10, -25], [10, -25]])
 
         if self.debug:
-            human_position = np.array([200, 450])
+            human_position = np.array([-2, 0])
             human_heading = np.array(np.pi/3)
         else:
             human_position = np.array([random.randrange(100, 300), random.randrange(300, 600)])
             human_heading = np.random.uniform(low=-np.pi/3, high=np.pi/3)
         self.human_state = np.array([human_position[0], human_position[1], human_heading], dtype=np.float32)
-        self.human_tripoints = np.array([[0, 25], [-10, -25], [10, -25]])
-
-
-        while(np.min(wall_set_distance(self.walls, self.human_state)) <= 0):
-            self.human_state = np.array([random.randrange(1, 400), random.randrange(1, 900)])
 
         # Goals
         self.robot_goal_rect = np.array([100, 300, 200, 300])
