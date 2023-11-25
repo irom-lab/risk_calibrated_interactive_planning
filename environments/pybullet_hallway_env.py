@@ -2,6 +2,8 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import cv2
+import os
+from os.path import expanduser
 import random
 import time
 from enum import IntEnum
@@ -336,24 +338,26 @@ class BulletHallwayEnv(gym.Env):
         # Load assets
         self.p.setGravity(0, 0, -9.8)
 
-
-        self.plane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
+        home = expanduser("~")
+        wallpath = os.path.join(home, 'PredictiveRL/object/wall.urdf') #/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/
+        self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
+        self.plane = self.p.loadURDF("plane.urdf",
                                      [0, 0, 0],
                                      [0, 0, 0, 1])
-        wall1 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, -3, 0], [0, 0, 0, 1],
+        wall1 = self.p.loadURDF(wallpath, [0, -3, 0], [0, 0, 0, 1],
                                 useFixedBase=True)
-        wall2 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, -1, 0], [0, 0, 0, 1],
+        wall2 = self.p.loadURDF(wallpath, [0, -1, 0], [0, 0, 0, 1],
                                 useFixedBase=True)
-        wall3 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 1, 0], [0, 0, 0, 1],
+        wall3 = self.p.loadURDF(wallpath, [0, 1, 0], [0, 0, 0, 1],
                                 useFixedBase=True)
-        wall4 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 3, 0], [0, 0, 0, 1],
+        wall4 = self.p.loadURDF(wallpath, [0, 3, 0], [0, 0, 0, 1],
                                 useFixedBase=True)
 
 
         goal_orientation = self.p.getQuaternionFromEuler([0, 0, -np.pi / 2])
-        goal1 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [3, 0, -0.4999], goal_orientation,
+        goal1 = self.p.loadURDF(wallpath, [3, 0, -0.4999], goal_orientation,
                            useFixedBase=True)
-        goal2 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [-3, 0, -0.4999], goal_orientation,
+        goal2 = self.p.loadURDF(wallpath, [-3, 0, -0.4999], goal_orientation,
                            useFixedBase=True)
         self.wall_assets = [wall1, wall2, wall3, wall4]
         self.goal_assets = [goal1, goal2]
