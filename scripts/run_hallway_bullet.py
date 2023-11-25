@@ -1,8 +1,8 @@
 import numpy as np
 from stable_baselines3 import PPO, SAC #, MultiModalPPO
 #from sb3_contrib import RecurrentPPO
-from environments.hallway_env import HallwayEnv
-from environments.make_vectorized_hallway_env import make_env
+from environments.pybullet_hallway_env import BulletHallwayEnv
+from environments.make_vectorized_hallway_env import make_bullet_env
 import os
 import time
 
@@ -32,25 +32,25 @@ logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
 
 render = False
 debug = False
-rgb_observation = True
+rgb_observation = False
 online = False
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
     episodes = 1
-    num_cpu = 128  # Number of processes to use
+    num_cpu = 64  # Number of processes to use
     max_steps = 200
     learn_steps = 12800
     save_freq = 100000
     n_iters=1000
-    video_length=200
+    video_length=max_steps
     timesteps = max_steps
 
     # Create the vectorized environment
-    env = SubprocVecEnv([make_env(i, render=render, debug=debug,
+    env = SubprocVecEnv([make_bullet_env(i, render=render, debug=debug,
                                   time_limit=max_steps, rgb_observation=rgb_observation) for i in range(num_cpu)])
     # env = VecFrameStack(env, n_stack=4)
     env = VecMonitor(env, logdir + "log")
-    videnv = HallwayEnv(render=render, debug=debug, time_limit=max_steps, rgb_observation=rgb_observation)
+    videnv = BulletHallwayEnv(render=render, debug=debug, time_limit=max_steps, rgb_observation=rgb_observation)
     videnv = DummyVecEnv([lambda: videnv])
     # videnv = VecFrameStack(videnv, n_stack=4)
     videnv = VecVideoRecorder(videnv, video_folder=logdir, record_video_trigger=lambda x: True, video_length=video_length)
@@ -68,7 +68,7 @@ if __name__ == ("__main__"):
     print('Training Policy.')
     policy_kwargs = dict(net_arch=dict(pi=[64, 64], vf=[64, 64]))
     model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir,
-                n_steps=max_steps, n_epochs=2, learning_rate=1e-6, gamma=0.999, policy_kwargs=policy_kwargs)
+                n_steps=max_steps, n_epochs=3, learning_rate=1e-6, gamma=0.999, policy_kwargs=policy_kwargs)
     # model = SAC('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir, learning_rate=1e-4, gamma=0.999)
 
     callback = SaveOnBestTrainingRewardCallback(check_freq=save_freq, log_dir=logdir)

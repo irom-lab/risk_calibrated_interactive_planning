@@ -109,27 +109,22 @@ class BulletHallwayEnv(gym.Env):
         super(BulletHallwayEnv, self).__init__()
 
         self.urdfRoot = urdfRoot
+        self.cam_dist = 7
+        self.cam_yaw = 20
+        self.cam_pitch = -45
+        self.cam_targ = [0, 0, 0]
 
         if render:
             self.p = bc.BulletClient(connection_mode=pybullet.GUI)
         else:
-            self.p = bc.BulletClient()
+            self.p = bc.BulletClient(connection_mode=pybullet.DIRECT)
 
+        self.p.resetDebugVisualizerCamera(cameraDistance=self.cam_dist,
+                                          cameraYaw=self.cam_yaw,
+                                          cameraPitch=self.cam_pitch,
+                                          cameraTargetPosition=self.cam_targ)
         self.p.resetSimulation()
 
-        self.p.setGravity(0, 0, -9.8)
-
-        self.plane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf", [0, 0, 0],
-                   [0, 0, 0, 1])
-        wall1 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, -3, 0], [0, 0, 0, 1],
-                           useFixedBase=True)
-        wall2 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, -1, 0], [0, 0, 0, 1],
-                           useFixedBase=True)
-        wall3 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 1, 0], [0, 0, 0, 1],
-                           useFixedBase=True)
-        wall4 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 3, 0], [0, 0, 0, 1],
-                           useFixedBase=True)
-        self.wall_assets = [wall1, wall2, wall3, wall4]
         self.robot = None
         self.human = None
 
@@ -188,11 +183,14 @@ class BulletHallwayEnv(gym.Env):
         # controls = np.array([-self.max_turning_rate, 0, self.max_turning_rate])
         # actions = [controls[a] for a in action]
         actions = action
-        targetvel = 1
-        robot_action = np.array(targetvel, action[0])
-        human_action = np.array(targetvel, action[1])
-        self.robot.applyAction(robot_action)
-        self.human.applyAction(human_action)
+        targetvel = -1
+        robot_action = np.array([targetvel, action[0]])
+        human_action = np.array([targetvel, action[1]])
+        same_action_time = 25
+        for _ in range(same_action_time):
+            self.robot.applyAction(robot_action)
+            self.human.applyAction(human_action)
+            self.p.stepSimulation()
 
         self.human_state = self.get_state(self.human.racecarUniqueId)
         self.robot_state = self.get_state(self.robot.racecarUniqueId)
@@ -210,14 +208,14 @@ class BulletHallwayEnv(gym.Env):
         violated_dist = any(wall_dist <= 0.25) or any(human_wall_dist <= 0.25)
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1 \
                 or violated_dist:
-            self.done = False
+            self.done = True
             collision_penalty = 0.05
 
         if collision_with_human(self.robot_state, self.human_state):
             collision_penalty = 1
 
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1:
-            self.done = False
+            self.done = True
             collision_penalty = 0.05
 
         if wrong_hallway:
@@ -240,7 +238,7 @@ class BulletHallwayEnv(gym.Env):
             self.reward = self.prev_dist_robot - self.dist_robot
             self.reward = np.sign(self.reward)
         self.reward = self.prev_dist_human - self.dist_human + self.prev_dist_robot - self.dist_robot
-        self.reward = self.reward / 100
+        self.reward = self.reward * 10
         #print(self.reward)
         self.reward += - collision_penalty
         self.prev_reward = self.reward
@@ -284,6 +282,7 @@ class BulletHallwayEnv(gym.Env):
     def reset(self, seed=1234, options={}):
 
         self.timesteps = 0
+        self.p.resetSimulation()
 
         learning_agent = np.random.choice(2)
         if learning_agent == LearningAgent.ROBOT:
@@ -318,7 +317,7 @@ class BulletHallwayEnv(gym.Env):
             robot_position = np.array([4, 0])
             robot_heading = np.pi + np.array(np.pi)
         else:
-            robot_position = np.array([random.randrange(1300, 1500), random.randrange(300, 600)])
+            robot_position = np.array([np.random.uniform(low=3, high=4.5), np.random.uniform(low=-3, high=3)])
             robot_heading = np.pi + np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
         self.robot_state = np.array([robot_position[0], robot_position[1], robot_heading], dtype=np.float32)
         self.robot_tripoints = np.array([[0, 25], [-10, -25], [10, -25]])
@@ -327,20 +326,73 @@ class BulletHallwayEnv(gym.Env):
             human_position = np.array([-4, 0])
             human_heading = np.pi + np.array(np.pi/3)
         else:
-            human_position = np.array([random.randrange(100, 300), random.randrange(300, 600)])
+            human_position = np.array([np.random.uniform(low=-4.5, high=-3), np.random.uniform(low=-3, high=3)])
             human_heading = np.pi + np.random.uniform(low=-np.pi/3, high=np.pi/3)
         self.human_state = np.array([human_position[0], human_position[1], human_heading], dtype=np.float32)
 
         human_orientation = self.p.getQuaternionFromEuler([0, 0, human_heading])
         robot_orientation = self.p.getQuaternionFromEuler([0, 0, robot_heading])
+
+        # Load assets
+        self.p.setGravity(0, 0, -9.8)
+
+
+        self.plane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
+                                     [0, 0, 0],
+                                     [0, 0, 0, 1])
+        wall1 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, -3, 0], [0, 0, 0, 1],
+                                useFixedBase=True)
+        wall2 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, -1, 0], [0, 0, 0, 1],
+                                useFixedBase=True)
+        wall3 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 1, 0], [0, 0, 0, 1],
+                                useFixedBase=True)
+        wall4 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [0, 3, 0], [0, 0, 0, 1],
+                                useFixedBase=True)
+
+
+        goal_orientation = self.p.getQuaternionFromEuler([0, 0, -np.pi / 2])
+        goal1 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [3, 0, -0.4999], goal_orientation,
+                           useFixedBase=True)
+        goal2 = self.p.loadURDF("/Users/justinlidard/PredictiveRL/object/wall.urdf", [-3, 0, -0.4999], goal_orientation,
+                           useFixedBase=True)
+        self.wall_assets = [wall1, wall2, wall3, wall4]
+        self.goal_assets = [goal1, goal2]
+        for asset in self.wall_assets:
+            self.p.changeVisualShape(asset, -1, rgbaColor=[0, 0, 0, 1])
+        self.p.changeVisualShape(goal1, -1, rgbaColor=[1, 0, 0, 1])
+        self.p.changeVisualShape(goal2, -1, rgbaColor=[0, 0, 1, 1])
         self.human = racecar.Racecar(self.p, urdfRootPath=self.urdfRoot, timeStep=self.timesteps,
                                      pos=(human_position[0],human_position[1],0.2),
                                      orientation=human_orientation)
         self.robot = racecar.Racecar(self.p, urdfRootPath=self.urdfRoot, timeStep=self.timesteps,
                                      pos=(robot_position[0],robot_position[1],0.2),
                                      orientation=robot_orientation)
+
+        self.human.applyAction([0, 0])
+        self.robot.applyAction([0, 0])
         for i in range(100):
             self.p.stepSimulation()
+
+        # uplane_orientation = self.p.getQuaternionFromEuler([np.pi/2, 0, 0])
+        # upperplane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
+        #                              [0, 5, 0],
+        #                              uplane_orientation)
+        # self.p.changeVisualShape(upperplane, -1, rgbaColor=[1, 0, 0, 0.1])
+        # rplane_orientation = self.p.getQuaternionFromEuler([0, np.pi/2, 0])
+        # rightplane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
+        #                              [5, 0, 0],
+        #                              rplane_orientation)
+        # self.p.changeVisualShape(rightplane, -1, rgbaColor=[1, 0, 0, 0.1])
+        # lplane_orientation = self.p.getQuaternionFromEuler([0, np.pi/2, 0])
+        # leftplane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
+        #                              [-5, 0, 0],
+        #                              lplane_orientation)
+        # self.p.changeVisualShape(leftplane, -1, rgbaColor=[1, 0, 0, 0.1])
+        # dplane_orientation = self.p.getQuaternionFromEuler([np.pi/2, 0, 0])
+        # lowerplane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
+        #                              [0, -5, 0],
+        #                              dplane_orientation)
+        # self.p.changeVisualShape(lowerplane, -1, rgbaColor=[1, 0, 0, 0.1])
 
         self.human_state = self.get_state(self.human.racecarUniqueId)
         self.robot_state = self.get_state(self.robot.racecarUniqueId)
@@ -531,26 +583,28 @@ class BulletHallwayEnv(gym.Env):
         cv2.fillPoly(self.img, [robot_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(255, 0, 0))
         cv2.waitKey(1)
 
-    def render(self, mode='human', close=False):
-        if mode != "rgb_array":
-            return np.array([])
+    def render(self):
+        # if mode != "rgb_array":
+        #     return np.array([])
         base_pos, orn = self.p.getBasePositionAndOrientation(self.robot.racecarUniqueId)
-        view_matrix = self.p.computeViewMatrixFromYawPitchRoll(cameraTargetPosition=base_pos,
-                                                                # distance=self._cam_dist,
-                                                                # yaw=self._cam_yaw,
-                                                                # pitch=self._cam_pitch,
+        view_matrix = self.p.computeViewMatrixFromYawPitchRoll(cameraTargetPosition=self.cam_targ,
+                                                                distance=self.cam_dist,
+                                                                yaw=self.cam_yaw,
+                                                                pitch=self.cam_pitch,
                                                                 roll=0,
                                                                 upAxisIndex=2)
         proj_matrix = self.p.computeProjectionMatrixFOV(fov=60,
                                                          aspect=float(RENDER_WIDTH) / RENDER_HEIGHT,
                                                          nearVal=0.1,
                                                          farVal=100.0)
-        (_, _, px, _, _) = self.p.getCameraImage(width=RENDER_WIDTH,
+        (w, h, px, _, _) = self.p.getCameraImage(width=RENDER_WIDTH,
                                                   height=RENDER_HEIGHT,
                                                   viewMatrix=view_matrix,
                                                   projectionMatrix=proj_matrix,
                                                   renderer=pybullet.ER_BULLET_HARDWARE_OPENGL)
         rgb_array = np.array(px)
+        rgb_array = np.reshape(rgb_array, (h, w, 4))
+        #rgb_array = np.transpose(rgb_array, (2, 0, 1))
         rgb_array = rgb_array[:, :, :3]
         return rgb_array
         
