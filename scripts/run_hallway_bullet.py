@@ -25,7 +25,7 @@ from wandb_osh.hooks import TriggerWandbSyncHook  # <-- New!
 
 trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
-home = expanduser("~")
+home = '/scratch/gpfs/jlidard/' #expanduser("~")
 
 models_dir = f"../models/{int(time.time())}/"
 logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
