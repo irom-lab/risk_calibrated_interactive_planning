@@ -1,20 +1,26 @@
 import numpy as np
-from stable_baselines3 import PPO, SAC #, MultiModalPPO
-#from sb3_contrib import RecurrentPPO
+from stable_baselines3 import PPO, SAC  # , MultiModalPPO
+# from sb3_contrib import RecurrentPPO
 from environments.hallway_env import HallwayEnv
 from environments.make_vectorized_hallway_env import make_env
 import os
 import time
+import pandas as pd
 
 from gymnasium.envs.registration import register
 from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv, VecFrameStack
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env.vec_monitor import VecMonitor
 from stable_baselines3.common.utils import obs_as_tensor, safe_mean
-
 from environments.save_best_training_reward_callback import SaveOnBestTrainingRewardCallback
 
 from stable_baselines3.common.vec_env.vec_video_recorder import VecVideoRecorder
+from environments.hallway_env import HumanIntent
+
+import matplotlib.pyplot as plt
+
+from model_zoo.vlm_interface import extract_probs, lm
+
 
 from record_video import record_video
 
@@ -29,6 +35,7 @@ home = expanduser("~")
 
 models_dir = f"../models/{int(time.time())}/"
 logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
+dataframe_path = os.path.join(home, f"PredictiveRL/data/{int(time.time())}.csv")
 
 render = True
 debug = False
@@ -69,30 +76,60 @@ if __name__ == ("__main__"):
     policy_kwargs = dict(net_arch=dict(pi=[64, 64], vf=[64, 64]))
     model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir,
                 n_steps=max_steps, n_epochs=2, learning_rate=1e-6, gamma=0.999, policy_kwargs=policy_kwargs)
-    # model = SAC('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir, learning_rate=1e-4, gamma=0.999)
+    # Load model here
 
-    callback = SaveOnBestTrainingRewardCallback(check_freq=save_freq, log_dir=logdir)
 
-    print("Starting training...")
-    best_mean_reward = -np.Inf
-    for iter in range(n_iters):
-        model.learn(total_timesteps=learn_steps, tb_log_name=f"PPO", callback=callback)
-        ep_info_buffer = model.ep_info_buffer
-        training_dict = dict(model.logger.__dict__["name_to_value"])
-        ep_mean_reward = safe_mean([ep_info["r"] for ep_info in ep_info_buffer])
-        ep_mean_len = safe_mean([ep_info["l"] for ep_info in ep_info_buffer])
-        training_dict["train/mean_reward"] = ep_mean_reward
-        if ep_mean_reward > best_mean_reward:
-            best_mean_reward = ep_mean_reward
-        training_dict["train/best_mean_reward"] = best_mean_reward
-        training_dict["time/num_timesteps"] = callback.num_timesteps
-        training_dict["time/epochs"] = iter
-        training_dict["time/mean_episode_length"] = ep_mean_len
+    num_cal = 100
+    observation_list = []
+    label_list = []
+    for _ in range(num_cal):
+        obs = videnv.reset()
+        intent = np.random.choice(5)
+        videnv.env.envs[0].seed_intent(HumanIntent(intent))
+        total_reward = 0
+        video_length_actual = np.random.randint(low=0, high=video_length)
+        # rollout to a random timepoint
+        for i in range(video_length):
+            action, _states = model.predict(obs, deterministic=True)
+            obs, rewards, dones, info = videnv.step(action)
+            total_reward += rewards
+            if dones[0]:
+                continue
+        print(f"Total reward: {total_reward}")
+        observation = obs
+        observation_list.append(obs)
+        label_list.append(intent)
+    dataset = pd.DataFrame({"context": observation_list, "label": label_list})
+    dataset.to_csv(dataframe_path)
 
-        if iter % 25 == 0:
-            record_video(videnv, model, video_length=video_length)
+    non_conformity_score = []
+    for index, row in dataset.iterrows():
+        context = row[0]
+        label = row[1]
+        # save image
+        # prompt lm
+        # extract probs
+        non_conformity_score.append(1 - true_label_smx)
 
-        wandb.log(training_dict)
-        if not online:
-            trigger_sync()  # <-- New!
-    print("...Done.")
+    q_level = np.ceil((num_calibration + 1) * (1 - epsilon)) / num_calibration
+    qhat = np.quantile(non_conformity_score, q_level, method='higher')
+    print('Quantile value qhat:', qhat)
+    print('')
+
+    # plot histogram and quantile
+    plt.figure(figsize=(6, 2))
+    plt.hist(non_conformity_score, bins=30, edgecolor='k', linewidth=1)
+    plt.axvline(
+        x=qhat, linestyle='--', color='r', label='Quantile value'
+    )
+    plt.title(
+        'Histogram of non-comformity scores in the calibration set'
+    )
+    plt.xlabel('Non-comformity score')
+    plt.legend();
+    plt.show()
+    print('')
+    print('A good predictor should have low non-comformity scores, concentrated at the left side of the figure')
+
+
+

@@ -188,7 +188,7 @@ class BulletHallwayEnv(gym.Env):
         targetvel = -1
         robot_action = np.array([targetvel, action[0]])
         human_action = np.array([targetvel, action[1]])
-        same_action_time = 25
+        same_action_time = 10
         for _ in range(same_action_time):
             self.robot.applyAction(robot_action)
             self.human.applyAction(human_action)
@@ -322,7 +322,6 @@ class BulletHallwayEnv(gym.Env):
             robot_position = np.array([np.random.uniform(low=3, high=4.5), np.random.uniform(low=-3, high=3)])
             robot_heading = np.pi + np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
         self.robot_state = np.array([robot_position[0], robot_position[1], robot_heading], dtype=np.float32)
-        self.robot_tripoints = np.array([[0, 25], [-10, -25], [10, -25]])
 
         if self.debug:
             human_position = np.array([-4, 0])
@@ -402,8 +401,8 @@ class BulletHallwayEnv(gym.Env):
         self.robot_state = self.get_state(self.robot.racecarUniqueId)
 
         # Goals
-        self.robot_goal_rect = np.array([-4, 2, 2, 4])
-        self.human_goal_rect = np.array([2, 2, 2, 4])
+        self.robot_goal_rect = np.array([-3.5, 1, 1, 2])
+        self.human_goal_rect = np.array([2.5, 1, 1, 2])
         self.score = 0
         self.prev_button_direction = 1
         self.button_direction = 1
@@ -538,54 +537,6 @@ class BulletHallwayEnv(gym.Env):
             else:
                 return False
 
-    def get_image(self, resolution_scale):
-        robot_tripoints = state_to_tripoints(self.robot_state, self.robot_tripoints)*resolution_scale
-        human_tripoints = state_to_tripoints(self.human_state, self.human_tripoints)*resolution_scale
-
-        self.img = 255 - np.zeros((900*resolution_scale, 1600*resolution_scale, 3), dtype='uint8')
-
-        # Display Goal
-        cv2.rectangle(self.img, (self.robot_goal_rect[0]*resolution_scale, self.robot_goal_rect[1]*resolution_scale),
-                      (self.robot_goal_rect[0]*resolution_scale + self.robot_goal_rect[2]*resolution_scale,
-                       self.robot_goal_rect[1]*resolution_scale + self.robot_goal_rect[3]*resolution_scale),
-                      (255, 0, 0), 3)
-
-        # Display Human Goal
-        cv2.rectangle(self.img, (self.human_goal_rect[0]*resolution_scale, self.human_goal_rect[1]*resolution_scale),
-                      (self.human_goal_rect[0]*resolution_scale + self.human_goal_rect[2]*resolution_scale,
-                       self.human_goal_rect[1]*resolution_scale + self.human_goal_rect[3]*resolution_scale),
-                      (0, 0, 255), 3)
-
-        # Display Robot Boundary
-        cv2.circle(self.img, (int(self.robot_state[0]), int(self.robot_state[1])), 50, (255, 0, 0), thickness=1, lineType=8, shift=0)
-
-        # Display Human Boundary
-        cv2.circle(self.img, (int(self.human_state[0]), int(self.human_state[1])), 50, (0, 0, 255), thickness=1, lineType=8, shift=0)
-
-
-        # Display Human Boundary
-
-        for wall in self.walls[:-1]:
-            cv2.rectangle(self.img, (wall[0]*resolution_scale, wall[1]*resolution_scale),
-                          (wall[0]*resolution_scale + WALL_XLEN*resolution_scale,
-                           wall[1]*resolution_scale + WALL_YLEN*resolution_scale), (0, 0, 0), -1)
-
-        intent_wall = self.walls[self.intent]
-        x, y, w, h = (intent_wall[0]*resolution_scale, intent_wall[1]*resolution_scale - WALL_YLEN*resolution_scale,
-                      WALL_XLEN*resolution_scale, WALL_YLEN*resolution_scale)
-        sub_img = self.img[y:y + h, x:x + w]
-        intent_rect = np.zeros(sub_img.shape, dtype=np.uint8)
-        intent_rect[:, :, -1] = 255
-
-        res = cv2.addWeighted(sub_img, 0.5, intent_rect, 0.5, 1.0)
-
-        # Putting the image back to its position
-        self.img[y:y + h, x:x + w] = res
-
-        # Display human and robot
-        cv2.fillPoly(self.img, [human_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(0, 0, 255))
-        cv2.fillPoly(self.img, [robot_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(255, 0, 0))
-        cv2.waitKey(1)
 
     def render(self):
         # if mode != "rgb_array":

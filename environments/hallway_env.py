@@ -331,6 +331,13 @@ class HallwayEnv(gym.Env):
 
         if self.rgb_observation:
             self.get_image(resolution_scale=1)
+            from PIL import Image
+            img = Image.fromarray(self.img, 'RGB')
+            img.save('try.png')
+            import time
+            print("something")
+            time.sleep(10)
+
             observation = cv2.resize(self.img, (256, 256))
         else:
             human_delta = self.robot_state - self.human_state
@@ -351,12 +358,6 @@ class HallwayEnv(gym.Env):
         # observation = np.concatenate((self.robot_state, self.human_state))
         observation = {"obs": observation, "mode": np.eye(5)[self.intent]}
 
-        # from PIL import Image
-        # img = Image.fromarray(observation["obs"], 'RGB')
-        # img.save('try.png')
-        # import time
-        # print("something")
-        # time.sleep(10)
 
         return observation, {}
 
@@ -476,11 +477,20 @@ class HallwayEnv(gym.Env):
         res = cv2.addWeighted(sub_img, 0.5, intent_rect, 0.5, 1.0)
 
         # Putting the image back to its position
-        self.img[y:y + h, x:x + w] = res
+        # self.img[y:y + h, x:x + w] = res
 
         # Display human and robot
         cv2.fillPoly(self.img, [human_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(0, 0, 255))
         cv2.fillPoly(self.img, [robot_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(255, 0, 0))
+
+        for i, wall in enumerate(self.walls):
+            strx = int(wall[0] + WALL_XLEN/2)
+            stry = int(wall[1] - WALL_YLEN/2)
+            str = f"{i}"
+            cv2.putText(self.img, str, (strx*resolution_scale, stry*resolution_scale),
+                        self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
+
+
         cv2.waitKey(1)
 
     def render(self, resolution_scale=1):
