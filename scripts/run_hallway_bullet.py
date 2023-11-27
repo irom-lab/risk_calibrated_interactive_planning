@@ -17,6 +17,7 @@ from environments.save_best_training_reward_callback import SaveOnBestTrainingRe
 from stable_baselines3.common.vec_env.vec_video_recorder import VecVideoRecorder
 
 from record_video import record_video
+import platform
 
 from os.path import expanduser
 
@@ -25,7 +26,11 @@ from wandb_osh.hooks import TriggerWandbSyncHook  # <-- New!
 
 trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
-home = '/scratch/gpfs/jlidard/' #expanduser("~")
+node = platform.node()
+if node == 'mae-majumdar-lab6':
+    home = expanduser("~")   # lab desktop
+else:
+    home = '/scratch/gpfs/jlidard/'  # della fast IO file system
 
 models_dir = f"../models/{int(time.time())}/"
 logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")

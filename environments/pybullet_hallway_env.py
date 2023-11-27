@@ -267,13 +267,12 @@ class BulletHallwayEnv(gym.Env):
             robot_wall_dist = wall_set_distance(self.walls, self.robot_state)
             self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
             self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
-            observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing*100]),
+            observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing]),
                                          human_wall_dist, robot_wall_dist,
                                          human_wall_dist[self.intent:self.intent+1],
                                          robot_wall_dist[self.intent:self.intent+1],
-                                         self.robot_state[-1:]*100, self.human_state[-1:]*100,
+                                         self.robot_state[-1:], self.human_state[-1:],
                                          np.array([self.dist_robot, self.dist_human])))
-            observation /= 100
         #observation = np.concatenate((self.robot_state, self.human_state))
         observation = {"obs": observation, "mode": np.eye(5)[self.intent]}
 
