@@ -96,8 +96,8 @@ if __name__ == ("__main__"):
         training_dict["time/epochs"] = iter
         training_dict["time/mean_episode_length"] = ep_mean_len
 
-        if iter % 100 == 0:
-            record_video(videnv, model, video_length=video_length)
+        # if iter % 100 == 0:
+        #     record_video(videnv, model, video_length=video_length)
 
         wandb.log(training_dict)
         if not online:
