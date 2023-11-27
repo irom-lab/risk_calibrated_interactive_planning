@@ -1,4 +1,5 @@
 import openai
+from openai import OpenAI
 import signal
 import tqdm.notebook as tqdm
 import random
@@ -112,7 +113,6 @@ def lm(prompt,
     for _ in range(max_attempts):
         try:
             with timeout(seconds=timeout_seconds):
-                from openai import OpenAI
 
                 response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
 
