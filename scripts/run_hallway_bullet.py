@@ -29,20 +29,22 @@ trigger_sync = TriggerWandbSyncHook()  # <--- New!
 node = platform.node()
 if node == 'mae-majumdar-lab6':
     home = expanduser("~")   # lab desktop
+    num_cpu = 1
+    render = True
 else:
     home = '/scratch/gpfs/jlidard/'  # della fast IO file system
+    num_cpu = 64
+    render = False
 
 models_dir = f"../models/{int(time.time())}/"
 logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
 
-render = False
 debug = False
 rgb_observation = False
 online = False
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
     episodes = 1
-    num_cpu = 64  # Number of processes to use
     max_steps = 200
     learn_steps = 12800
     save_freq = 100000

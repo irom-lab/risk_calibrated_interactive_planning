@@ -307,11 +307,12 @@ class BulletHallwayEnv(gym.Env):
         self.img = 255 - np.zeros((900, 1600, 3), dtype='uint8')
 
         # Hallway boundaries. Top left corner.
-        self.walls = np.array([[-1, -2.5],
-                                [-1, -0.5],
-                                [-1, 1.5],
-                                [-1, 3.5],
-                                [-1, 5.5]]) # include a "hidden" wall for visualizing the intent
+        self.walls = np.array([[-1, -4.5],
+                               [-1, -2.5],
+                               [-1, -0.5],
+                               [-1, 1.5],
+                               [-1, 3.5]]) # include a "hidden" wall for visualizing the intent
+        self.walls = self.walls[::-1]
 
         # Initial robot and human position
         if self.debug:
