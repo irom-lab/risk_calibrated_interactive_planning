@@ -208,9 +208,8 @@ class BulletHallwayEnv(gym.Env):
         wrong_hallway = self.intent_violation(self.human_state, rect)
 
         violated_dist = any(wall_dist <= 0.25) or any(human_wall_dist <= 0.25)
-        if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1 \
-                or violated_dist:
-            self.done = True
+        if violated_dist:
+            self.done = False
             collision_penalty = 0.05
 
         if collision_with_human(self.robot_state, self.human_state):
@@ -240,7 +239,7 @@ class BulletHallwayEnv(gym.Env):
             self.reward = self.prev_dist_robot - self.dist_robot
             self.reward = np.sign(self.reward)
         self.reward = self.prev_dist_human - self.dist_human + self.prev_dist_robot - self.dist_robot
-        self.reward = self.reward * 10
+        self.reward = self.reward
         #print(self.reward)
         self.reward += - collision_penalty
         self.prev_reward = self.reward
@@ -358,12 +357,26 @@ class BulletHallwayEnv(gym.Env):
                            useFixedBase=True)
         goal2 = self.p.loadURDF(wallpath, [-3, 0, -0.4999], goal_orientation,
                            useFixedBase=True)
+
+
+        # visualize human intent
+        wall_coord = self.walls[self.intent]
+        wall_left = wall_coord[0]
+        wall_right = WALL_XLEN
+        wall_up = wall_coord[1] + WALL_YLEN
+        wall_down = wall_up - WALL_YLEN
+        rect = (wall_left, wall_up, WALL_XLEN, WALL_YLEN)
+        intent = self.p.loadURDF(wallpath, [wall_left + WALL_XLEN/2, wall_up - WALL_YLEN/2, -0.4999], [0, 0, 0, 1],
+                                useFixedBase=True)
+
+
         self.wall_assets = [wall1, wall2, wall3, wall4]
         self.goal_assets = [goal1, goal2]
         for asset in self.wall_assets:
             self.p.changeVisualShape(asset, -1, rgbaColor=[0, 0, 0, 1])
         self.p.changeVisualShape(goal1, -1, rgbaColor=[1, 0, 0, 1])
         self.p.changeVisualShape(goal2, -1, rgbaColor=[0, 0, 1, 1])
+        self.p.changeVisualShape(intent, -1, rgbaColor=[1, 0, 0, 0.5])
         self.human = racecar.Racecar(self.p, urdfRootPath=self.urdfRoot, timeStep=self.timesteps,
                                      pos=(human_position[0],human_position[1],0.2),
                                      orientation=human_orientation)

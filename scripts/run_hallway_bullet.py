@@ -30,7 +30,7 @@ node = platform.node()
 if node == 'mae-majumdar-lab6':
     home = expanduser("~")   # lab desktop
     num_cpu = 1
-    render = False
+    render = True
 else:
     home = '/scratch/gpfs/jlidard/'  # della fast IO file system
     num_cpu = 128
