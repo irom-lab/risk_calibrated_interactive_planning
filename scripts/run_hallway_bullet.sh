@@ -6,7 +6,7 @@
 #SBATCH --mem-per-cpu=4G         # memory per cpu-core (4G is default)
 #SBATCH --time=8:00:00         # total run time limit (HH:MM:SS)
 #SBATCH --output=/home/jlidard/PredictiveRL/slurm/hallway_bullet_%j.out
-#SBATCH --gres=gpu:1
+##SBATCH --gres=gpu:1
 ##SBATCH --mail-type=begin        # send email when job begins
 ##SBATCH --mail-type=end          # send email when job ends
 ##SBATCH --mail-user=<YourNetID>@princeton.edu
