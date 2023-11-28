@@ -16,6 +16,13 @@ LOWER_BOUNDARY = 900
 WALL_XLEN = 400
 WALL_YLEN = 100
 
+# VLM prompt for this env
+prompt = "This is a metaphorical cartoon of a human navigating a warehouse with 5 hallways numbered 0-4. " \
+         "The human is the blue triangle inside the red rectangle, on the left side. The human's heading is towards " \
+         "the bottom right of the image. The human could enter one of five hallways in the center of the screen. " \
+         "Based on the human's current position and heading, which hallway(s) is the human likely to enter? " \
+         "Give approximate numeric probabilities for all hallways 0-4. Just give the probabilities and be as brief as possible."
+
 class HumanIntent(IntEnum):
     HALLWAY1 = 0
     HALLWAY2 = 1
@@ -331,12 +338,12 @@ class HallwayEnv(gym.Env):
 
         if self.rgb_observation:
             self.get_image(resolution_scale=1)
-            from PIL import Image
-            img = Image.fromarray(self.img, 'RGB')
-            img.save('try.png')
-            import time
-            print("something")
-            time.sleep(10)
+            # from PIL import Image
+            # img = Image.fromarray(self.img, 'RGB')
+            # img.save('try.png')
+            # import time
+            # print("something")
+            # time.sleep(10)
 
             observation = cv2.resize(self.img, (256, 256))
         else:

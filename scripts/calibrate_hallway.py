@@ -2,40 +2,29 @@ import numpy as np
 from stable_baselines3 import PPO, SAC  # , MultiModalPPO
 # from sb3_contrib import RecurrentPPO
 from environments.hallway_env import HallwayEnv
-from environments.make_vectorized_hallway_env import make_env
+from environments.make_vectorized_hallway_env import make_env, make_bullet_env
 import os
 import time
 import pandas as pd
-
-from gymnasium.envs.registration import register
-from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv, VecFrameStack
-from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.vec_env.vec_monitor import VecMonitor
-from stable_baselines3.common.utils import obs_as_tensor, safe_mean
-from environments.save_best_training_reward_callback import SaveOnBestTrainingRewardCallback
-
-from stable_baselines3.common.vec_env.vec_video_recorder import VecVideoRecorder
+from PIL import Image
 from environments.hallway_env import HumanIntent
-
 import matplotlib.pyplot as plt
-
-from model_zoo.vlm_interface import extract_probs, lm
-
-
-from record_video import record_video
-
+from environments.hallway_env import HallwayEnv, prompt
 from os.path import expanduser
-
 import wandb
-from wandb_osh.hooks import TriggerWandbSyncHook  # <-- New!
+from wandb_osh.hooks import TriggerWandbSyncHook
+from model_zoo.vlm_interface import vlm, hallway_parse_response
 
 trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
 home = expanduser("~")
 
-models_dir = f"../models/{int(time.time())}/"
-logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
-dataframe_path = os.path.join(home, f"PredictiveRL/data/{int(time.time())}.csv")
+model_num = 1700523344  # Best kinematic
+model_num = 1700717235  # Best RGB
+
+loaddir = os.path.join(home, f"PredictiveRL/logs/{model_num}/best_model.zip")
+logdir = os.path.join(home, f"PredictiveRL/conformal_outputs/{int(time.time())}/")
+dataframe_path = os.path.join(home, f"PredictiveRL/conformal_outputs/{int(time.time())}.csv")
 
 render = True
 debug = False
@@ -53,14 +42,7 @@ if __name__ == ("__main__"):
     timesteps = max_steps
 
     # Create the vectorized environment
-    env = SubprocVecEnv([make_env(i, render=render, debug=debug,
-                                  time_limit=max_steps, rgb_observation=rgb_observation) for i in range(num_cpu)])
-    # env = VecFrameStack(env, n_stack=4)
-    env = VecMonitor(env, logdir + "log")
-    videnv = HallwayEnv(render=render, debug=debug, time_limit=max_steps, rgb_observation=rgb_observation)
-    videnv = DummyVecEnv([lambda: videnv])
-    # videnv = VecFrameStack(videnv, n_stack=4)
-    videnv = VecVideoRecorder(videnv, video_folder=logdir, record_video_trigger=lambda x: True, video_length=video_length)
+    env = HallwayEnv(render=render, debug=debug, time_limit=max_steps, rgb_observation=rgb_observation)
 
     if online:
         wandb.init(
@@ -76,41 +58,49 @@ if __name__ == ("__main__"):
     policy_kwargs = dict(net_arch=dict(pi=[64, 64], vf=[64, 64]))
     model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir,
                 n_steps=max_steps, n_epochs=2, learning_rate=1e-6, gamma=0.999, policy_kwargs=policy_kwargs)
-    # Load model here
+    model.load(loaddir)
 
 
-    num_cal = 100
+    num_calibration = 5
     observation_list = []
     label_list = []
-    for _ in range(num_cal):
-        obs = videnv.reset()
+    for _ in range(num_calibration):
+        obs, _ = env.reset()
         intent = np.random.choice(5)
-        videnv.env.envs[0].seed_intent(HumanIntent(intent))
+        env.seed_intent(HumanIntent(intent))
         total_reward = 0
-        video_length_actual = np.random.randint(low=0, high=video_length)
+        episode_length_actual = np.random.randint(low=0, high=video_length/10)
         # rollout to a random timepoint
-        for i in range(video_length):
+        for i in range(episode_length_actual):
             action, _states = model.predict(obs, deterministic=True)
-            obs, rewards, dones, info = videnv.step(action)
+            obs, rewards, done, trunc, info = env.step(action)
             total_reward += rewards
-            if dones[0]:
+            if done:
                 continue
         print(f"Total reward: {total_reward}")
-        observation = obs
-        observation_list.append(obs)
-        label_list.append(intent)
+        observation = obs["obs"]
+        observation_list.append(observation)
+        label_list.append(intent)  #TODO(justin.lidard): add dynamic intents
     dataset = pd.DataFrame({"context": observation_list, "label": label_list})
     dataset.to_csv(dataframe_path)
 
+    # img = Image.fromarray(observation["obs"], 'RGB')
+    # img.save('try.png')
+
     non_conformity_score = []
+    image_path = '/home/jlidard/PredictiveRL/hallway_tmp.png'
     for index, row in dataset.iterrows():
         context = row[0]
         label = row[1]
-        # save image
-        # prompt lm
+        img = Image.fromarray(context, 'RGB')
+        img.save(image_path)
+        response = vlm(prompt=prompt, image_path=image_path)
+        probs = hallway_parse_response(response)
+        true_label_smx = probs[label]
         # extract probs
         non_conformity_score.append(1 - true_label_smx)
 
+    epsilon = 0.15
     q_level = np.ceil((num_calibration + 1) * (1 - epsilon)) / num_calibration
     qhat = np.quantile(non_conformity_score, q_level, method='higher')
     print('Quantile value qhat:', qhat)
