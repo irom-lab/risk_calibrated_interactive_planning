@@ -17,7 +17,7 @@ WALL_XLEN = 400
 WALL_YLEN = 100
 
 # VLM prompt for this env
-prompt = "This is a metaphorical cartoon of a human navigating a warehouse with 5 hallways numbered 0-4. " \
+prompt = "This is a metaphorical cartoon of a human navigating a room with 5 hallways numbered 0-4. " \
          "The human is the blue triangle inside the red rectangle, on the left side. The human's heading is towards " \
          "the bottom right of the image. The human could enter one of five hallways in the center of the screen. " \
          "Based on the human's current position and heading, which hallway(s) is the human likely to enter? " \
@@ -461,10 +461,10 @@ class HallwayEnv(gym.Env):
                       (0, 0, 255), 3)
 
         # Display Robot Boundary
-        cv2.circle(self.img, (int(self.robot_state[0]), int(self.robot_state[1])), 50, (255, 0, 0), thickness=1, lineType=8, shift=0)
+        cv2.circle(self.img, (int(self.robot_state[0]*resolution_scale), int(self.robot_state[1]*resolution_scale)), 50, (255, 0, 0), thickness=1, lineType=8, shift=0)
 
         # Display Human Boundary
-        cv2.circle(self.img, (int(self.human_state[0]), int(self.human_state[1])), 50, (0, 0, 255), thickness=1, lineType=8, shift=0)
+        cv2.circle(self.img, (int(self.human_state[0]*resolution_scale), int(self.human_state[1]*resolution_scale)), 50, (0, 0, 255), thickness=1, lineType=8, shift=0)
 
 
         # Display Human Boundary
@@ -523,7 +523,7 @@ class HallwayEnv(gym.Env):
                     self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
 
         if self.display_render:
-            self.img = cv2.resize(self.img, (960, 540))
+            # self.img = cv2.resize(self.img, (960, 540))
             cv2.imshow('Hallway Environment', self.img)
             cv2.waitKey(1)
 

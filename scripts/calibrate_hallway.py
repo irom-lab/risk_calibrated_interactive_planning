@@ -69,7 +69,7 @@ if __name__ == ("__main__"):
         intent = np.random.choice(5)
         env.seed_intent(HumanIntent(intent))
         total_reward = 0
-        episode_length_actual = np.random.randint(low=0, high=video_length/10)
+        episode_length_actual = np.random.randint(low=video_length/10, high=video_length/5)
         # rollout to a random timepoint
         for i in range(episode_length_actual):
             action, _states = model.predict(obs, deterministic=True)
@@ -78,7 +78,8 @@ if __name__ == ("__main__"):
             if done:
                 continue
         print(f"Total reward: {total_reward}")
-        observation = obs["obs"]
+        img_obs = env.render(resolution_scale=2)
+        observation = img_obs
         observation_list.append(observation)
         label_list.append(intent)  #TODO(justin.lidard): add dynamic intents
     dataset = pd.DataFrame({"context": observation_list, "label": label_list})
