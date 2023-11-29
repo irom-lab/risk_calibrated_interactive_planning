@@ -17,11 +17,12 @@ WALL_XLEN = 400
 WALL_YLEN = 100
 
 # VLM prompt for this env
-prompt = "This is a metaphorical cartoon of a human navigating a room with 5 hallways numbered 0-4. " \
-         "The human is the blue triangle inside the red rectangle, on the left side. The human's heading is towards " \
-         "the bottom right of the image. The human could enter one of five hallways in the center of the screen. " \
-         "Based on the human's current position and heading, which hallway(s) is the human likely to enter? " \
-         "Give approximate numeric probabilities for all hallways 0-4. Just give the probabilities and be as brief as possible."
+prompt = "This is a metaphorical and fictitious cartoon of a human navigating a room with 5 hallways numbered 0-4. " \
+          "The human is represented by the red triangle. The human's heading is given by the pointy end of the "\
+          "traingle. The human could enter one of five numbered hallways in the center of the screen. The human will"\
+           "prefer hallways that are closer and don't require a change in direction. Based on the human's " \
+          "current position and heading, which hallway(s) is the human likely to enter? Give approximate numeric "\
+          "probabilities for all hallways 0-4. Just give the probabilities and be as brief as possible."
 
 class HumanIntent(IntEnum):
     HALLWAY1 = 0
@@ -479,24 +480,16 @@ class HallwayEnv(gym.Env):
                       WALL_XLEN*resolution_scale, WALL_YLEN*resolution_scale)
         sub_img = self.img[y:y + h, x:x + w]
         intent_rect = np.zeros(sub_img.shape, dtype=np.uint8)
-        intent_rect[:, :, -1] = 255
+        intent_rect[:, :, 0] = 255
 
         res = cv2.addWeighted(sub_img, 0.5, intent_rect, 0.5, 1.0)
 
-        # Putting the image back to its position
+        # # Putting the image back to its position
         # self.img[y:y + h, x:x + w] = res
 
         # Display human and robot
         cv2.fillPoly(self.img, [human_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(0, 0, 255))
         cv2.fillPoly(self.img, [robot_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(255, 0, 0))
-
-        for i, wall in enumerate(self.walls):
-            strx = int(wall[0] + WALL_XLEN/2)
-            stry = int(wall[1] - WALL_YLEN/2)
-            str = f"{i}"
-            cv2.putText(self.img, str, (strx*resolution_scale, stry*resolution_scale),
-                        self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
-
 
         cv2.waitKey(1)
 
@@ -504,14 +497,16 @@ class HallwayEnv(gym.Env):
 
         self.get_image(resolution_scale)
 
+        display_img = cv2.flip(self.img, 1)
+
         # Display the policy and intent
         mode = self.intent
         str = f"Human intent: hallway {mode}"
-        cv2.putText(self.img, str, (1300*resolution_scale, 25*resolution_scale),
+        cv2.putText(display_img, str, (1300*resolution_scale, 25*resolution_scale),
                     self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
 
         str = f"Cumulative reward: {self.cumulative_reward}"
-        cv2.putText(self.img, str, (1300*resolution_scale, 50*resolution_scale),
+        cv2.putText(display_img, str, (1300*resolution_scale, 50*resolution_scale),
                     self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
 
         if self.learning_agent == LearningAgent.HUMAN:
@@ -519,12 +514,20 @@ class HallwayEnv(gym.Env):
         else:
             la_str = "Blue"
         str = f"Learning agent: {la_str}"
-        cv2.putText(self.img, str, (1300*resolution_scale, 75*resolution_scale),
+        cv2.putText(display_img, str, (1300*resolution_scale, 75*resolution_scale),
                     self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
+
+        for img in [self.img, display_img]:
+            for i, wall in enumerate(self.walls):
+                strx = int(wall[0] + WALL_XLEN/2)
+                stry = int(wall[1] - WALL_YLEN/2)
+                str = f"{i}"
+                cv2.putText(img, str, (strx*resolution_scale, stry*resolution_scale),
+                            self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
 
         if self.display_render:
             # self.img = cv2.resize(self.img, (960, 540))
-            cv2.imshow('Hallway Environment', self.img)
+            cv2.imshow('Hallway Environment', display_img)
             cv2.waitKey(1)
 
         # Takes step after fixed time
