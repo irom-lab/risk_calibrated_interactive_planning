@@ -30,7 +30,7 @@ node = platform.node()
 if node == 'mae-majumdar-lab6':
     home = expanduser("~")   # lab desktop
     num_cpu = 1
-    render = True
+    render = False
     debug = False
 else:
     home = '/scratch/gpfs/jlidard/'  # della fast IO file system
@@ -38,16 +38,18 @@ else:
     render = False
     debug = False
 
-models_dir = f"~/PredictiveRL/models/{int(time.time())}/"
+models_dir = f"{home}/PredictiveRL/models/{int(time.time())}/"
 logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
 
-rgb_observation = True
+os.makedirs(models_dir, exist_ok=True)
+
+rgb_observation = False
 online = False
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
     episodes = 1
     max_steps = 200
-    learn_steps = 12800
+    learn_steps = 25000
     save_freq = 100000
     n_iters=1000
     video_length=max_steps
@@ -98,7 +100,17 @@ if __name__ == ("__main__"):
         training_dict["time/mean_episode_length"] = ep_mean_len
 
         if iter % 100 == 0:
+            model.save(os.path.join(models_dir, f"epoch_{iter}"))
+
+            if ep_mean_reward >= best_mean_reward:
+                model.save(os.path.join(models_dir, f"model_best_{iter}"))
+
+        if iter % 100 == 0:
             record_video(videnv, model, video_length=video_length)
+
+        if iter % 100 == 0:
+            record_video(videnv, model, video_length=video_length)
+
 
         wandb.log(training_dict)
         if not online:
