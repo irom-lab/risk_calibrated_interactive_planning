@@ -167,6 +167,7 @@ class BulletHallwayEnv(gym.Env):
         self.time_limit = time_limit
         self.learning_agent = LearningAgent.HUMAN
         self.cumulative_reward = 0
+        self.prev_corridor_dist = 0
 
     def state_history_numpy(self):
         state_history = np.array(self.prev_states).flatten()
@@ -188,7 +189,7 @@ class BulletHallwayEnv(gym.Env):
         targetvel = -1
         robot_action = np.array([targetvel, action[0]])
         human_action = np.array([targetvel, action[1]])
-        same_action_time = 10
+        same_action_time = 15
         for _ in range(same_action_time):
             self.robot.applyAction(robot_action)
             self.human.applyAction(human_action)
@@ -210,14 +211,20 @@ class BulletHallwayEnv(gym.Env):
         violated_dist = any(wall_dist <= 0.25) or any(human_wall_dist <= 0.25)
         if violated_dist:
             self.done = False
-            collision_penalty = 0.05
+            collision_penalty = 0.1
+
+        intent_bonus = 0
+        intent_corridor_dist = wall_set_distance([rect[:2]], self.human_state)[0]
+        if self.human_state[0] < wall_left:
+            intent_bonus = self.prev_corridor_dist - intent_corridor_dist
+        self.prev_corridor_dist = intent_corridor_dist
 
         if collision_with_human(self.robot_state, self.human_state):
             collision_penalty = 1
 
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1:
             self.done = True
-            collision_penalty = 0.05
+            collision_penalty = 0.1
 
         if wrong_hallway:
             self.done = True
@@ -241,7 +248,7 @@ class BulletHallwayEnv(gym.Env):
         self.reward = self.prev_dist_human - self.dist_human + self.prev_dist_robot - self.dist_robot
         self.reward = self.reward
         #print(self.reward)
-        self.reward += - collision_penalty
+        self.reward += - collision_penalty + intent_bonus
         self.prev_reward = self.reward
         self.prev_dist_robot = self.dist_robot
         self.prev_dist_human = self.dist_human
@@ -433,9 +440,9 @@ class BulletHallwayEnv(gym.Env):
         for i in range(self.obs_seq_len):
             self.prev_states.append([0] * self.state_dim)  # to create history
 
+        intent_corridor_dist = wall_set_distance([rect[:2]], self.human_state)[0]
+        self.prev_corridor_dist = intent_corridor_dist
         self.reward = - np.linalg.norm(self.robot_state[:2] - self.robot_goal_rect[:2]) - np.linalg.norm(self.human_state[:2] - self.human_goal_rect[:2])
-        self.reward = self.reward
-        #print(self.reward)
         self.prev_reward = self.reward
         self.cumulative_reward = 0
 
