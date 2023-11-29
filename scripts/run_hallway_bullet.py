@@ -31,15 +31,16 @@ if node == 'mae-majumdar-lab6':
     home = expanduser("~")   # lab desktop
     num_cpu = 1
     render = True
+    debug = False
 else:
     home = '/scratch/gpfs/jlidard/'  # della fast IO file system
     num_cpu = 128
     render = False
+    debug = False
 
 models_dir = f"../models/{int(time.time())}/"
 logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
 
-debug = False
 rgb_observation = False
 online = False
 # 'if __name__' Necessary for multithreading

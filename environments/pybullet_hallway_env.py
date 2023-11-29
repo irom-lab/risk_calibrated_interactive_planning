@@ -38,7 +38,7 @@ class LearningAgent(IntEnum):
     HUMAN=0 # Red
     ROBOT=1 # Blue
 
-def collision_with_human(robot_position, human_position, eps=0.5):
+def collision_with_human(robot_position, human_position, eps=1):
     col = np.linalg.norm(robot_position[:2] - human_position[:2]) < eps
     return col
 
@@ -69,7 +69,7 @@ def wall_set_distance(walls, robot_pos):
 
 def rect_set_dist(rect, pos):
     (rect_left, rect_up, drect_right, drect_down) = rect
-    rect_down = rect_up + drect_down
+    rect_down = rect_up - drect_down
     rect_right = rect_left + drect_right
 
     # compute displacements (positive ==> on "this" side, e.g. dr>0 ==> on the right side, du>0 ==> above, etc.)
@@ -105,7 +105,7 @@ def rect_unpack_sides(rect):
 
 class BulletHallwayEnv(gym.Env):
 
-    def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=1, deterministic_intent=None,
+    def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=0.1, deterministic_intent=None,
                  debug=False, render_mode="rgb_array", time_limit=100, rgb_observation=False,
                  urdfRoot=pybullet_data.getDataPath()):
         super(BulletHallwayEnv, self).__init__()
@@ -210,14 +210,15 @@ class BulletHallwayEnv(gym.Env):
 
         violated_dist = any(wall_dist <= 0.25) or any(human_wall_dist <= 0.25)
         if violated_dist:
-            self.done = False
+            self.done = True
             collision_penalty = 0.1
 
-        intent_bonus = 0
-        intent_corridor_dist = wall_set_distance([rect[:2]], self.human_state)[0]
-        if self.human_state[0] < wall_left:
-            intent_bonus = self.prev_corridor_dist - intent_corridor_dist
-        self.prev_corridor_dist = intent_corridor_dist
+        # intent_bonus = 0
+        # intent_corridor_dist = wall_set_distance([rect[:2]], self.human_state)[0]
+        # if self.human_state[0] < wall_left:
+        #     intent_bonus = self.prev_corridor_dist - intent_corridor_dist
+        # self.prev_corridor_dist = intent_corridor_dist
+        # print(intent_bonus)
 
         if collision_with_human(self.robot_state, self.human_state):
             collision_penalty = 1
@@ -248,7 +249,7 @@ class BulletHallwayEnv(gym.Env):
         self.reward = self.prev_dist_human - self.dist_human + self.prev_dist_robot - self.dist_robot
         self.reward = self.reward
         #print(self.reward)
-        self.reward += - collision_penalty + intent_bonus
+        self.reward += - collision_penalty #+ intent_bonus
         self.prev_reward = self.reward
         self.prev_dist_robot = self.dist_robot
         self.prev_dist_human = self.dist_human
@@ -306,7 +307,7 @@ class BulletHallwayEnv(gym.Env):
             intent = self.intent_seed
 
         # if self.debug:
-        # intent = 1
+        intent = 2
         self.intent = HumanIntent(intent)
 
 
@@ -331,7 +332,7 @@ class BulletHallwayEnv(gym.Env):
 
         if self.debug:
             human_position = np.array([-4, 0])
-            human_heading = np.pi + np.array(np.pi/3)
+            human_heading = np.pi #+ np.array(np.pi/3)
         else:
             human_position = np.array([np.random.uniform(low=-4.5, high=-3), np.random.uniform(low=-3, high=3)])
             human_heading = np.pi + np.random.uniform(low=-np.pi/3, high=np.pi/3)
