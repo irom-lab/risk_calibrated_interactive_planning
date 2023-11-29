@@ -26,7 +26,7 @@ loaddir = os.path.join(home, f"PredictiveRL/logs/{model_num}/best_model.zip")
 logdir = os.path.join(home, f"PredictiveRL/conformal_outputs/{int(time.time())}/")
 dataframe_path = os.path.join(home, f"PredictiveRL/conformal_outputs/{int(time.time())}.csv")
 
-render = True
+render = False
 debug = False
 rgb_observation = True
 online = False
@@ -61,7 +61,7 @@ if __name__ == ("__main__"):
     model.load(loaddir)
 
 
-    num_calibration = 5
+    num_calibration = 25
     observation_list = []
     label_list = []
     for _ in range(num_calibration):
@@ -95,9 +95,9 @@ if __name__ == ("__main__"):
         label = row[1]
         img = Image.fromarray(context, 'RGB')
         img.save(image_path)
-        response = vlm(prompt=prompt, image_path=image_path)
+        response = vlm(prompt=prompt, image_path=image_path) # response_str = response.json()["choices"][0]["message"]["content"]
         probs = hallway_parse_response(response)
-        true_label_smx = probs[label]
+        true_label_smx = probs[label]/100
         # extract probs
         non_conformity_score.append(1 - true_label_smx)
 
@@ -117,8 +117,8 @@ if __name__ == ("__main__"):
         'Histogram of non-comformity scores in the calibration set'
     )
     plt.xlabel('Non-comformity score')
-    plt.legend();
-    plt.show()
+    plt.legend()
+    plt.savefig('2d_hallway_non_conformity.py')
     print('')
     print('A good predictor should have low non-comformity scores, concentrated at the left side of the figure')
 

@@ -20,9 +20,12 @@ WALL_YLEN = 100
 prompt = "This is a metaphorical and fictitious cartoon of a human navigating a room with 5 hallways numbered 0-4. " \
           "The human is represented by the red triangle. The human's heading is given by the pointy end of the "\
           "traingle. The human could enter one of five numbered hallways in the center of the screen. The human will"\
-           "prefer hallways that are closer and don't require a change in direction. Based on the human's " \
-          "current position and heading, which hallway(s) is the human likely to enter? Give approximate numeric "\
-          "probabilities for all hallways 0-4. Just give the probabilities and be as brief as possible."
+        "prefer hallways that are closer and aligned with the human's heading. What hallway is the human closest to?" \
+         "What hallway is the human pointing towards? Based on the human's current position and heading, which" \
+         "hallway(s) is the human likely to enter? Give approximate numeric probabilities for all hallways 0-4," \
+          " in order starting with 0. "
+
+# Just give the probabilities and be as brief as possible."
 
 class HumanIntent(IntEnum):
     HALLWAY1 = 0
