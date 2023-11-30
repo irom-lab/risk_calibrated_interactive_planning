@@ -221,6 +221,7 @@ class BulletHallwayEnv(gym.Env):
         # print(intent_bonus)
 
         if collision_with_human(self.robot_state, self.human_state):
+            self.done = True
             collision_penalty = 1
 
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1:

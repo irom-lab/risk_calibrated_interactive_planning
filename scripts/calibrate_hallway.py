@@ -61,7 +61,7 @@ if __name__ == ("__main__"):
     model.load(loaddir)
 
 
-    num_calibration = 25
+    num_calibration = 5
     observation_list = []
     label_list = []
     for _ in range(num_calibration):
@@ -101,7 +101,11 @@ if __name__ == ("__main__"):
         # extract probs
         non_conformity_score.append(1 - true_label_smx)
 
+        if index % 25 == 0:
+            print(f"Done {index} of {num_calibration}.")
+
     epsilon = 0.15
+    num_calibration = 100 # fake!
     q_level = np.ceil((num_calibration + 1) * (1 - epsilon)) / num_calibration
     qhat = np.quantile(non_conformity_score, q_level, method='higher')
     print('Quantile value qhat:', qhat)
@@ -118,7 +122,7 @@ if __name__ == ("__main__"):
     )
     plt.xlabel('Non-comformity score')
     plt.legend()
-    plt.savefig('2d_hallway_non_conformity.py')
+    plt.savefig('2d_hallway_non_conformity.png')
     print('')
     print('A good predictor should have low non-comformity scores, concentrated at the left side of the figure')
 
