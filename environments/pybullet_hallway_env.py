@@ -210,7 +210,7 @@ class BulletHallwayEnv(gym.Env):
 
         violated_dist = any(wall_dist <= 0.25) or any(human_wall_dist <= 0.25)
         if violated_dist:
-            self.done = True
+            self.done = False
             collision_penalty = 0.1
 
         # intent_bonus = 0
@@ -260,7 +260,6 @@ class BulletHallwayEnv(gym.Env):
 
         info = {}
 
-
         human_delta_x = self.robot_state[0] - self.human_state[0]
         human_delta_y = self.robot_state[1] - self.human_state[1]
 
@@ -308,7 +307,6 @@ class BulletHallwayEnv(gym.Env):
             intent = self.intent_seed
 
         # if self.debug:
-        intent = 2
         self.intent = HumanIntent(intent)
 
 
@@ -324,20 +322,20 @@ class BulletHallwayEnv(gym.Env):
 
         # Initial robot and human position
         if self.debug:
-            robot_position = np.array([4, 0])
-            robot_heading = np.pi + np.array(np.pi)
+            human_position = np.array([4, 0])
+            human_heading = np.pi + np.array(np.pi)
         else:
-            robot_position = np.array([np.random.uniform(low=3, high=4.5), np.random.uniform(low=-3, high=3)])
-            robot_heading = np.pi + np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
-        self.robot_state = np.array([robot_position[0], robot_position[1], robot_heading], dtype=np.float32)
+            human_position = np.array([np.random.uniform(low=3, high=4.5), np.random.uniform(low=-3, high=3)])
+            human_heading = np.pi + np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
+        self.human_state = np.array([human_position[0], human_position[1], human_heading], dtype=np.float32)
 
         if self.debug:
-            human_position = np.array([-4, 0])
-            human_heading = np.pi #+ np.array(np.pi/3)
+            robot_position = np.array([-4, 0])
+            robot_heading = np.pi #+ np.array(np.pi/3)
         else:
-            human_position = np.array([np.random.uniform(low=-4.5, high=-3), np.random.uniform(low=-3, high=3)])
-            human_heading = np.pi + np.random.uniform(low=-np.pi/3, high=np.pi/3)
-        self.human_state = np.array([human_position[0], human_position[1], human_heading], dtype=np.float32)
+            robot_position = np.array([np.random.uniform(low=-4.5, high=-3), np.random.uniform(low=-3, high=3)])
+            robot_heading = np.pi + np.random.uniform(low=-np.pi/3, high=np.pi/3)
+        self.robot_state = np.array([robot_position[0], robot_position[1], robot_heading], dtype=np.float32)
 
         human_orientation = self.p.getQuaternionFromEuler([0, 0, human_heading])
         robot_orientation = self.p.getQuaternionFromEuler([0, 0, robot_heading])
@@ -383,8 +381,8 @@ class BulletHallwayEnv(gym.Env):
         self.goal_assets = [goal1, goal2]
         for asset in self.wall_assets:
             self.p.changeVisualShape(asset, -1, rgbaColor=[0, 0, 0, 1])
-        self.p.changeVisualShape(goal1, -1, rgbaColor=[1, 0, 0, 1])
-        self.p.changeVisualShape(goal2, -1, rgbaColor=[0, 0, 1, 1])
+        self.p.changeVisualShape(goal1, -1, rgbaColor=[0, 0, 1, 1])
+        self.p.changeVisualShape(goal2, -1, rgbaColor=[1, 0, 0, 1])
         self.p.changeVisualShape(intent, -1, rgbaColor=[1, 0, 0, 0.5])
         self.human = racecar.Racecar(self.p, urdfRootPath=self.urdfRoot, timeStep=self.timesteps,
                                      pos=(human_position[0],human_position[1],0.2),
