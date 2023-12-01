@@ -27,11 +27,11 @@ from wandb_osh.hooks import TriggerWandbSyncHook  # <-- New!
 trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
 node = platform.node()
-if node == 'mae-majumdar-lab6':
+if node == 'mae-majumdar-lab6' or node == "jlidard":
     home = expanduser("~")   # lab desktop
     num_cpu = 1
     render = True
-    debug = True
+    debug = False
 else:
     home = '/scratch/gpfs/jlidard/'  # della fast IO file system
     num_cpu = 128

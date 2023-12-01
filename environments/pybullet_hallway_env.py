@@ -105,7 +105,7 @@ def rect_unpack_sides(rect):
 
 class BulletHallwayEnv(gym.Env):
 
-    def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=0.1, deterministic_intent=None,
+    def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=1, deterministic_intent=None,
                  debug=False, render_mode="rgb_array", time_limit=100, rgb_observation=False,
                  urdfRoot=pybullet_data.getDataPath()):
         super(BulletHallwayEnv, self).__init__()
