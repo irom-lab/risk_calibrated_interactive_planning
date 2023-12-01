@@ -421,8 +421,8 @@ class BulletHallwayEnv(gym.Env):
         self.robot_state = self.get_state(self.robot.racecarUniqueId)
 
         # Goals
-        self.robot_goal_rect = np.array([-3.5, 1, 1, 2])
-        self.human_goal_rect = np.array([2.5, 1, 1, 2])
+        self.human_goal_rect= np.array([-3.5, 1, 1, 2])
+        self.robot_goal_rect = np.array([2.5, 1, 1, 2])
         self.score = 0
         self.prev_button_direction = 1
         self.button_direction = 1
