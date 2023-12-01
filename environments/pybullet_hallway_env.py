@@ -213,11 +213,11 @@ class BulletHallwayEnv(gym.Env):
             self.done = False
             collision_penalty = 0.1
 
-        # intent_bonus = 0
-        # intent_corridor_dist = wall_set_distance([rect[:2]], self.human_state)[0]
-        # if self.human_state[0] < wall_left:
-        #     intent_bonus = self.prev_corridor_dist - intent_corridor_dist
-        # self.prev_corridor_dist = intent_corridor_dist
+        intent_bonus = 0
+        intent_corridor_dist = wall_set_distance([rect[:2]], self.human_state)[0]
+        if self.human_state[0] < wall_left:
+            intent_bonus = self.prev_corridor_dist - intent_corridor_dist
+        self.prev_corridor_dist = intent_corridor_dist
         # print(intent_bonus)
 
         if collision_with_human(self.robot_state, self.human_state):
