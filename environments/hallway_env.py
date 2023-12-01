@@ -502,15 +502,7 @@ class HallwayEnv(gym.Env):
 
         display_img = cv2.flip(self.img, 1)
 
-        # Display the policy and intent
-        mode = self.intent
-        str = f"Human intent: hallway {mode}"
-        cv2.putText(display_img, str, (1300*resolution_scale, 25*resolution_scale),
-                    self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
 
-        str = f"Cumulative reward: {self.cumulative_reward}"
-        cv2.putText(display_img, str, (1300*resolution_scale, 50*resolution_scale),
-                    self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
 
         if self.learning_agent == LearningAgent.HUMAN:
             la_str = "Red"
@@ -521,6 +513,17 @@ class HallwayEnv(gym.Env):
                     self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
 
         for img in [self.img, display_img]:
+
+            # Display the policy and intent
+            mode = self.intent
+            str = f"Human intent: hallway {mode}"
+            cv2.putText(img, str, (1300 * resolution_scale, 25 * resolution_scale),
+                        self.font, 0.75 * resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
+
+            str = f"Cumulative reward: {self.cumulative_reward}"
+            cv2.putText(img, str, (1300 * resolution_scale, 50 * resolution_scale),
+                        self.font, 0.75 * resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
+
             for i, wall in enumerate(self.walls):
                 strx = int(wall[0] + WALL_XLEN/2)
                 stry = int(wall[1] - WALL_YLEN/2)
