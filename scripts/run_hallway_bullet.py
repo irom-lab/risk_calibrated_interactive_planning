@@ -32,11 +32,13 @@ if node == 'mae-majumdar-lab6':
     num_cpu = 8
     render = False
     debug = False
+    online = False
 else:
     home = '/scratch/gpfs/jlidard/'  # della fast IO file system
     num_cpu = 128
     render = False
     debug = False
+    online = False
 
 models_dir = f"{home}/PredictiveRL/models/{int(time.time())}/"
 logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
@@ -44,7 +46,6 @@ logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
 os.makedirs(models_dir, exist_ok=True)
 
 rgb_observation = False
-online = True
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
     episodes = 1
