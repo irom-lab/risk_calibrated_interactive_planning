@@ -35,7 +35,7 @@ if node == 'mae-majumdar-lab6':
     online = False
 else:
     home = '/scratch/gpfs/jlidard/'  # della fast IO file system
-    num_cpu = 128
+    num_cpu = 32
     render = False
     debug = False
     online = False
