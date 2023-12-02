@@ -189,7 +189,7 @@ class HallwayEnv(gym.Env):
         violated_dist = any(wall_dist <= 10) or any(human_wall_dist <= 10)
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1 \
                 or violated_dist:
-            self.done = True
+            self.done = False
             collision_penalty = 0.05
 
         if collision_with_human(self.robot_state, self.human_state):
@@ -483,12 +483,12 @@ class HallwayEnv(gym.Env):
                       WALL_XLEN*resolution_scale, WALL_YLEN*resolution_scale)
         sub_img = self.img[y:y + h, x:x + w]
         intent_rect = np.zeros(sub_img.shape, dtype=np.uint8)
-        intent_rect[:, :, 0] = 255
+        intent_rect[:, :, -1] = 255
 
         res = cv2.addWeighted(sub_img, 0.5, intent_rect, 0.5, 1.0)
 
         # # Putting the image back to its position
-        # self.img[y:y + h, x:x + w] = res
+        self.img[y:y + h, x:x + w] = res
 
         # Display human and robot
         cv2.fillPoly(self.img, [human_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(0, 0, 255))
