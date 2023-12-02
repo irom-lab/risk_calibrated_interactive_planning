@@ -29,8 +29,8 @@ trigger_sync = TriggerWandbSyncHook()  # <--- New!
 node = platform.node()
 if node == 'mae-majumdar-lab6':
     home = expanduser("~")   # lab desktop
-    num_cpu = 1
-    render = True
+    num_cpu = 8
+    render = False
     debug = False
 else:
     home = '/scratch/gpfs/jlidard/'  # della fast IO file system
@@ -44,7 +44,7 @@ logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
 os.makedirs(models_dir, exist_ok=True)
 
 rgb_observation = False
-online = False
+online = True
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
     episodes = 1
@@ -105,11 +105,8 @@ if __name__ == ("__main__"):
             if ep_mean_reward >= best_mean_reward:
                 model.save(os.path.join(models_dir, f"model_best_{iter}"))
 
-        if iter % 100 == 0:
-            record_video(videnv, model, video_length=video_length)
-
-        if iter % 100 == 0:
-            record_video(videnv, model, video_length=video_length)
+        # if iter % 100 == 0:
+        #     record_video(videnv, model, video_length=video_length)
 
 
         wandb.log(training_dict)

@@ -44,7 +44,7 @@ logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
 os.makedirs(models_dir, exist_ok=True)
 
 rgb_observation = False
-online = False
+online = True
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
     episodes = 1
