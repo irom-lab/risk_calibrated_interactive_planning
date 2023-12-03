@@ -27,8 +27,8 @@ from wandb_osh.hooks import TriggerWandbSyncHook  # <-- New!
 trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
 node = platform.node()
-if node == 'mae-majumdar-lab6':
-    home = expanduser("~")   # lab desktop
+if node == 'mae-majumdar-lab6' or node == "jlidard":
+    home = expanduser("~")   # lab desktop or ma
     num_cpu = 1
     render = True
     debug = False
@@ -50,7 +50,7 @@ rgb_observation = False
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
     episodes = 1
-    max_steps = 200
+    max_steps = 300
     learn_steps = 25000
     save_freq = 100000
     n_iters=1000

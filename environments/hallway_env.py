@@ -48,7 +48,7 @@ def distance_to_goal(pos, goal_rect):
 
 def collision_with_boundaries(robot_pos):
     if robot_pos[0] <= LEFT_BOUNDARY or robot_pos[0] >= RIGHT_BOUNDARY or \
-            robot_pos[1] <= LOWER_BOUNDARY or robot_pos[1] >= UPPER_BOUNDARY:
+            robot_pos[1] >= LOWER_BOUNDARY or robot_pos[1] <= UPPER_BOUNDARY:
         return 1
     else:
         return 0

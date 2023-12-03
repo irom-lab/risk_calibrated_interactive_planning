@@ -49,7 +49,7 @@ rgb_observation = False
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
     episodes = 1
-    max_steps = 200
+    max_steps = 300
     learn_steps = 25000
     save_freq = 100000
     n_iters=1000
