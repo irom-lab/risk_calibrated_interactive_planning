@@ -325,7 +325,7 @@ class BulletHallwayEnv(gym.Env):
             self.stuck_counter += 1
         else:
             self.stuck_counter = 0
-        if self.stuck_counter >= 10:
+        if self.stuck_counter >= 50:
             self.done=True
         self.reward = self.reward
         #print(self.reward)
