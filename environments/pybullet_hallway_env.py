@@ -223,7 +223,7 @@ class BulletHallwayEnv(gym.Env):
         # controls = np.array([-self.max_turning_rate, 0, self.max_turning_rate])
         # actions = [controls[a] for a in action]
         actions = action
-        targetvel = -0.75
+        targetvel = -1.25
         robot_action = np.array([targetvel, action[0]])
         human_action = np.array([targetvel, action[1]])
         same_action_time = 15
