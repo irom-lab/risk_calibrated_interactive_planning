@@ -121,6 +121,9 @@ class BulletHallwayEnv(gym.Env):
         else:
             self.p = bc.BulletClient(connection_mode=pybullet.DIRECT)
 
+        self.time_step_dt = 0.01
+        pybullet.setTimeStep(self.time_step_dt)
+
         self.p.resetDebugVisualizerCamera(cameraDistance=self.cam_dist,
                                           cameraYaw=self.cam_yaw,
                                           cameraPitch=self.cam_pitch,
@@ -178,6 +181,7 @@ class BulletHallwayEnv(gym.Env):
         self.wallpath = wallpath
         boundarylongpath = os.path.join(home, 'PredictiveRL/object/boundary_long.urdf')
         boundaryshortpath = os.path.join(home, 'PredictiveRL/object/boundary_short.urdf')
+        goalpath = os.path.join(home, 'PredictiveRL/object/goal.urdf')
         self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
         self.plane = self.p.loadURDF("plane.urdf",
                                      [0, 0, 0],
@@ -192,12 +196,12 @@ class BulletHallwayEnv(gym.Env):
                                 useFixedBase=True, useMaximalCoordinates=False)
 
         # Goals
-        self.human_goal_rect= np.array([-5.5, 1, 1, 2])
-        self.robot_goal_rect = np.array([5.5, 1, 1, 2])
+        self.human_goal_rect= np.array([-5, 2, 2, 4])
+        self.robot_goal_rect = np.array([4, 2, 2, 4])
         goal_orientation = self.p.getQuaternionFromEuler([0, 0, -np.pi / 2])
-        goal1 = self.p.loadURDF(wallpath, [self.robot_goal_rect[0]+WALL_YLEN/2, 0, -0.4999], goal_orientation,
+        goal1 = self.p.loadURDF(goalpath, [self.robot_goal_rect[0]+WALL_YLEN/2, 0, -0.4999], goal_orientation,
                            useFixedBase=True)
-        goal2 = self.p.loadURDF(wallpath, [self.human_goal_rect[0]-WALL_YLEN/2, 0, -0.4999], goal_orientation,
+        goal2 = self.p.loadURDF(goalpath, [self.human_goal_rect[0]+WALL_YLEN/2, 0, -0.4999], goal_orientation,
                            useFixedBase=True)
         self.wall_assets = [wall1, wall2, wall3, wall4]
         self.goal_assets = [goal1, goal2]
@@ -259,10 +263,10 @@ class BulletHallwayEnv(gym.Env):
         # actions = [controls[a] for a in action]
         actions = action
         action_scale = 0.5
-        targetvel = -1.25
+        targetvel = -1.5
         robot_action = np.array([targetvel, action_scale*action[0]])
         human_action = np.array([targetvel, action_scale*action[1]])
-        same_action_time = 15
+        same_action_time = 5
         for _ in range(same_action_time):
             self.robot.applyAction(robot_action)
             self.human.applyAction(human_action)
@@ -325,7 +329,7 @@ class BulletHallwayEnv(gym.Env):
             self.stuck_counter += 1
         else:
             self.stuck_counter = 0
-        if self.stuck_counter >= 50:
+        if self.stuck_counter >= 25:
             self.done=True
         self.reward = self.reward
         #print(self.reward)
