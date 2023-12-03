@@ -38,7 +38,7 @@ class LearningAgent(IntEnum):
     HUMAN=0 # Red
     ROBOT=1 # Blue
 
-def collision_with_human(robot_position, human_position, eps=1):
+def collision_with_human(robot_position, human_position, eps=0.5):
     col = np.linalg.norm(robot_position[:2] - human_position[:2]) < eps
     return col
 
@@ -105,7 +105,7 @@ def rect_unpack_sides(rect):
 
 class BulletHallwayEnv(gym.Env):
 
-    def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=1, deterministic_intent=None,
+    def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=2, deterministic_intent=None,
                  debug=False, render_mode="rgb_array", time_limit=100, rgb_observation=False,
                  urdfRoot=pybullet_data.getDataPath()):
         super(BulletHallwayEnv, self).__init__()
@@ -288,7 +288,7 @@ class BulletHallwayEnv(gym.Env):
         violated_dist = any(wall_dist <= 0.25) or any(human_wall_dist <= 0.25)
         if violated_dist:
             self.done = False
-            collision_penalty = 0.05
+            collision_penalty = 0.01
 
         intent_bonus = 0
         intent_corridor_dist = wall_set_distance([rect[:2]], self.human_state)[0]
@@ -303,7 +303,7 @@ class BulletHallwayEnv(gym.Env):
 
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1:
             self.done = False
-            collision_penalty = 0.05
+            collision_penalty = 0.01
 
         if wrong_hallway:
             self.done = True
@@ -339,6 +339,8 @@ class BulletHallwayEnv(gym.Env):
         self.prev_dist_human = self.dist_human
 
         self.cumulative_reward += self.reward
+
+        print(self.cumulative_reward)
 
 
         info = {}
