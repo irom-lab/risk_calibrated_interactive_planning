@@ -189,7 +189,7 @@ class HallwayEnv(gym.Env):
         violated_dist = any(wall_dist <= 10) or any(human_wall_dist <= 10)
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1 \
                 or violated_dist:
-            self.done = False
+            self.done = True
             collision_penalty = 0.05
 
         if collision_with_human(self.robot_state, self.human_state):
