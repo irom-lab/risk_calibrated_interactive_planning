@@ -47,8 +47,7 @@ def distance_to_goal(pos, goal_rect):
 
 
 def collision_with_boundaries(robot_pos):
-    if robot_pos[0] <= LEFT_BOUNDARY or robot_pos[0] >= RIGHT_BOUNDARY or \
-            robot_pos[1] <= UPPER_BOUNDARY or robot_pos[1] >= LOWER_BOUNDARY:
+    if robot_pos[0] <= LEFT_BOUNDARY or robot_pos[0] >= RIGHT_BOUNDARY:  # robot_pos[1] <= LOWER_BOUNDARY or robot_pos[1] >= UPPER_BOUNDARY:
         return 1
     else:
         return 0
@@ -187,16 +186,16 @@ class HallwayEnv(gym.Env):
         wrong_hallway = self.intent_violation(self.human_state, rect)
 
         violated_dist = any(wall_dist <= 10) or any(human_wall_dist <= 10)
-        if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1 \
-                or violated_dist:
+        if violated_dist:
             self.done = False
             collision_penalty = 0.05
 
         if collision_with_human(self.robot_state, self.human_state):
+            self.done = True
             collision_penalty = 1
 
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1:
-            self.done = False
+            self.done = True
             collision_penalty = 0.05
 
         if wrong_hallway:
@@ -407,16 +406,16 @@ class HallwayEnv(gym.Env):
         wall_dist = wall_set_distance(self.walls, new_state)
         violated_dist = any(wall_dist <= 0)
         valid_transition = True
-        if collision_with_boundaries(new_state) or violated_dist or collision_with_human(new_state, other_state): #or intent_violation(new_state):
+        if violated_dist: #or intent_violation(new_state):
             new_state_x = np.array([xnew, y])
             new_state_y = np.array([x, ynew])
             wall_dist_x = wall_set_distance(self.walls, new_state_x)
             violated_dist_x = any(wall_dist_x <= 0)
             wall_dist_y = wall_set_distance(self.walls, new_state_y)
             violated_dist_y = any(wall_dist_y <= 0)
-            if not(collision_with_boundaries(new_state_x) == 1 or violated_dist_x or collision_with_human(new_state_x, other_state)):# or intent_violation(new_state_x)):
+            if not( violated_dist_x):# or intent_violation(new_state_x)):
                 ynew = y
-            elif not(collision_with_boundaries(new_state_y) == 1 or violated_dist_y or collision_with_human(new_state_y, other_state)):# or intent_violation(new_state_y)):
+            elif not(violated_dist_y):# or intent_violation(new_state_y)):
                 xnew = x
             else:
                 xnew = x
@@ -483,12 +482,12 @@ class HallwayEnv(gym.Env):
                       WALL_XLEN*resolution_scale, WALL_YLEN*resolution_scale)
         sub_img = self.img[y:y + h, x:x + w]
         intent_rect = np.zeros(sub_img.shape, dtype=np.uint8)
-        intent_rect[:, :, 0] = 255
+        intent_rect[:, :, -1] = 255
 
         res = cv2.addWeighted(sub_img, 0.5, intent_rect, 0.5, 1.0)
 
         # # Putting the image back to its position
-        # self.img[y:y + h, x:x + w] = res
+        self.img[y:y + h, x:x + w] = res
 
         # Display human and robot
         cv2.fillPoly(self.img, [human_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(0, 0, 255))
@@ -502,25 +501,29 @@ class HallwayEnv(gym.Env):
 
         display_img = cv2.flip(self.img, 1)
 
-        # Display the policy and intent
-        mode = self.intent
-        str = f"Human intent: hallway {mode}"
-        cv2.putText(display_img, str, (1300*resolution_scale, 25*resolution_scale),
-                    self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
-
-        str = f"Cumulative reward: {self.cumulative_reward}"
-        cv2.putText(display_img, str, (1300*resolution_scale, 50*resolution_scale),
-                    self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
+        self.img = cv2.flip(self.img, 1)
+        self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2RGB)
 
         if self.learning_agent == LearningAgent.HUMAN:
             la_str = "Red"
         else:
             la_str = "Blue"
-        str = f"Learning agent: {la_str}"
+        str = f"Learning agent: Both"
         cv2.putText(display_img, str, (1300*resolution_scale, 75*resolution_scale),
                     self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
 
         for img in [self.img, display_img]:
+
+            # Display the policy and intent
+            mode = self.intent
+            str = f"Human intent: hallway {mode}"
+            cv2.putText(img, str, (1300 * resolution_scale, 25 * resolution_scale),
+                        self.font, 0.75 * resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
+
+            str = f"Cumulative reward: {self.cumulative_reward}"
+            cv2.putText(img, str, (1300 * resolution_scale, 50 * resolution_scale),
+                        self.font, 0.75 * resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
+
             for i, wall in enumerate(self.walls):
                 strx = int(wall[0] + WALL_XLEN/2)
                 stry = int(wall[1] - WALL_YLEN/2)

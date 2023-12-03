@@ -32,11 +32,13 @@ if node == 'mae-majumdar-lab6' or node == "jlidard":
     num_cpu = 1
     render = True
     debug = False
+    online = False
 else:
     home = '/scratch/gpfs/jlidard/'  # della fast IO file system
     num_cpu = 128
     render = False
     debug = False
+    online = False
 
 models_dir = f"{home}/PredictiveRL/models/{int(time.time())}/"
 logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
@@ -44,7 +46,6 @@ logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
 os.makedirs(models_dir, exist_ok=True)
 
 rgb_observation = False
-online = False
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
     episodes = 1
@@ -104,9 +105,6 @@ if __name__ == ("__main__"):
 
             if ep_mean_reward >= best_mean_reward:
                 model.save(os.path.join(models_dir, f"model_best_{iter}"))
-
-        if iter % 100 == 0:
-            record_video(videnv, model, video_length=video_length)
 
         if iter % 100 == 0:
             record_video(videnv, model, video_length=video_length)
