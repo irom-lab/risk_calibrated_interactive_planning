@@ -115,7 +115,7 @@ def state_to_tripoints(pos, tripoints_bf):
 
 class HallwayEnv(gym.Env):
 
-    def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=1, deterministic_intent=None,
+    def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=2, deterministic_intent=None,
                  debug=False, render_mode="rgb_array", time_limit=100, rgb_observation=False):
         super(HallwayEnv, self).__init__()
         # Define action and observation space
