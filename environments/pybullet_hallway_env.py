@@ -247,7 +247,7 @@ class BulletHallwayEnv(gym.Env):
         violated_dist = any(wall_dist <= 0.25) or any(human_wall_dist <= 0.25)
         if violated_dist:
             self.done = False
-            collision_penalty = 0.10
+            collision_penalty = 0.05
 
         intent_bonus = 0
         intent_corridor_dist = wall_set_distance([rect[:2]], self.human_state)[0]
