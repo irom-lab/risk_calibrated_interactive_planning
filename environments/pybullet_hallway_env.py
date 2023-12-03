@@ -223,9 +223,10 @@ class BulletHallwayEnv(gym.Env):
         # controls = np.array([-self.max_turning_rate, 0, self.max_turning_rate])
         # actions = [controls[a] for a in action]
         actions = action
+        action_scale = 0.5
         targetvel = -1.25
-        robot_action = np.array([targetvel, action[0]])
-        human_action = np.array([targetvel, action[1]])
+        robot_action = np.array([targetvel, action_scale*action[0]])
+        human_action = np.array([targetvel, action_scale*action[1]])
         same_action_time = 15
         for _ in range(same_action_time):
             self.robot.applyAction(robot_action)
@@ -287,7 +288,7 @@ class BulletHallwayEnv(gym.Env):
         self.reward = self.prev_dist_human - self.dist_human + self.prev_dist_robot - self.dist_robot
         self.reward = self.reward
         #print(self.reward)
-        self.reward += - collision_penalty + 10*intent_bonus
+        self.reward += - collision_penalty #+ 10*intent_bonus
         self.prev_reward = self.reward
         self.prev_dist_robot = self.dist_robot
         self.prev_dist_human = self.dist_human
