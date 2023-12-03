@@ -111,8 +111,8 @@ class BulletHallwayEnv(gym.Env):
         super(BulletHallwayEnv, self).__init__()
 
         self.urdfRoot = urdfRoot
-        self.cam_dist = 7
-        self.cam_yaw = 20
+        self.cam_dist = 10
+        self.cam_yaw = -60
         self.cam_pitch = -45
         self.cam_targ = [0, 0, 0]
 
@@ -175,18 +175,20 @@ class BulletHallwayEnv(gym.Env):
         home = expanduser("~")
         wallpath = os.path.join(home, 'PredictiveRL/object/wall.urdf') #/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/
         self.wallpath = wallpath
+        boundarylongpath = os.path.join(home, 'PredictiveRL/object/boundary_long.urdf')
+        boundaryshortpath = os.path.join(home, 'PredictiveRL/object/boundary_short.urdf')
         self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
         self.plane = self.p.loadURDF("plane.urdf",
                                      [0, 0, 0],
                                      [0, 0, 0, 1])
         wall1 = self.p.loadURDF(wallpath, [0, -3, 0], [0, 0, 0, 1],
-                                useFixedBase=True)
+                                useFixedBase=True, useMaximalCoordinates=False)
         wall2 = self.p.loadURDF(wallpath, [0, -1, 0], [0, 0, 0, 1],
-                                useFixedBase=True)
+                                useFixedBase=True, useMaximalCoordinates=False)
         wall3 = self.p.loadURDF(wallpath, [0, 1, 0], [0, 0, 0, 1],
-                                useFixedBase=True)
+                                useFixedBase=True, useMaximalCoordinates=False)
         wall4 = self.p.loadURDF(wallpath, [0, 3, 0], [0, 0, 0, 1],
-                                useFixedBase=True)
+                                useFixedBase=True, useMaximalCoordinates=False)
 
         # Goals
         self.human_goal_rect= np.array([-5.5, 1, 1, 2])
@@ -203,6 +205,38 @@ class BulletHallwayEnv(gym.Env):
             self.p.changeVisualShape(asset, -1, rgbaColor=[0, 0, 0, 1])
         self.p.changeVisualShape(goal1, -1, rgbaColor=[0, 0, 1, 1])
         self.p.changeVisualShape(goal2, -1, rgbaColor=[1, 0, 0, 1])
+
+
+        # Boundaries
+        uplane_orientation = lplane_orientation = self.p.getQuaternionFromEuler([np.pi/2, 0, 0])
+        ub = self.p.loadURDF(boundarylongpath,[0, UPPER_BOUNDARY, 0], uplane_orientation, useFixedBase=True)
+        lb = self.p.loadURDF(boundarylongpath,[0, LOWER_BOUNDARY, 0], lplane_orientation, useFixedBase=True)
+
+        rplane_orientation = leftplane_orientation = self.p.getQuaternionFromEuler([np.pi/2, 0, 0])
+        leftb = self.p.loadURDF(boundaryshortpath,[LEFT_BOUNDARY, 0, 0], rplane_orientation, useFixedBase=True)
+        rightb = self.p.loadURDF(boundaryshortpath,[RIGHT_BOUNDARY,0, 0], leftplane_orientation, useFixedBase=True)
+        self.boundary_assets = [ub, lb, leftb, rightb]
+
+
+        # upperplane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
+        #                              [0, UPPER_BOUNDARY, 0],
+        #                              uplane_orientation)
+        # self.p.changeVisualShape(upperplane, -1, rgbaColor=[0, 0, 0, 0.4])
+        # rplane_orientation = self.p.getQuaternionFromEuler([0, np.pi/2, 0])
+        # rightplane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
+        #                              [RIGHT_BOUNDARY, 0, 0],
+        #                              rplane_orientation)
+        # self.p.changeVisualShape(rightplane, -1, rgbaColor=[0, 0, 0, 0.4])
+        # lplane_orientation = self.p.getQuaternionFromEuler([0, np.pi/2, 0])
+        # leftplane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
+        #                              [LEFT_BOUNDARY, 0, 0],
+        #                              lplane_orientation)
+        # self.p.changeVisualShape(leftplane, -1, rgbaColor=[0, 0, 0, 0.4])
+        # dplane_orientation = self.p.getQuaternionFromEuler([np.pi/2, 0, 0])
+        # lowerplane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
+        #                              [0, LOWER_BOUNDARY, 0],
+        #                              dplane_orientation)
+        # self.p.changeVisualShape(lowerplane, -1, rgbaColor=[0, 0, 0, 0.4])
 
 
 
@@ -401,6 +435,20 @@ class BulletHallwayEnv(gym.Env):
                                      useFixedBase=True)
             self.p.changeVisualShape(intent, -1, rgbaColor=[1, 0, 0, 0.5])
             self.intent_asset = intent
+
+            collisionFilterGroup = 0
+            collisionFilterMask = 0
+            self.p.setCollisionFilterGroupMask(self.human.racecarUniqueId, -1, collisionFilterGroup, collisionFilterMask)
+            self.p.setCollisionFilterGroupMask(self.robot.racecarUniqueId, -1, collisionFilterGroup, collisionFilterMask)
+
+            enableCollision = 1
+            for wall in self.wall_assets:
+                self.p.setCollisionFilterPair(wall, self.human.racecarUniqueId, -1, -1, enableCollision)
+                self.p.setCollisionFilterPair(wall, self.robot.racecarUniqueId, -1, -1, enableCollision)
+
+            for boundary in self.boundary_assets:
+                self.p.setCollisionFilterPair(boundary, self.human.racecarUniqueId, -1, -1, enableCollision)
+                self.p.setCollisionFilterPair(boundary, self.robot.racecarUniqueId, -1, -1, enableCollision)
         else:
             self.p.resetBasePositionAndOrientation(self.human.racecarUniqueId,(human_position[0],human_position[1],0.2),human_orientation)
             self.p.resetBasePositionAndOrientation(self.robot.racecarUniqueId,(robot_position[0],robot_position[1],0.2),robot_orientation)
@@ -411,27 +459,6 @@ class BulletHallwayEnv(gym.Env):
         self.robot.applyAction([0, 0])
         for i in range(100):
             self.p.stepSimulation()
-
-        # uplane_orientation = self.p.getQuaternionFromEuler([np.pi/2, 0, 0])
-        # upperplane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
-        #                              [0, 5, 0],
-        #                              uplane_orientation)
-        # self.p.changeVisualShape(upperplane, -1, rgbaColor=[1, 0, 0, 0.1])
-        # rplane_orientation = self.p.getQuaternionFromEuler([0, np.pi/2, 0])
-        # rightplane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
-        #                              [5, 0, 0],
-        #                              rplane_orientation)
-        # self.p.changeVisualShape(rightplane, -1, rgbaColor=[1, 0, 0, 0.1])
-        # lplane_orientation = self.p.getQuaternionFromEuler([0, np.pi/2, 0])
-        # leftplane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
-        #                              [-5, 0, 0],
-        #                              lplane_orientation)
-        # self.p.changeVisualShape(leftplane, -1, rgbaColor=[1, 0, 0, 0.1])
-        # dplane_orientation = self.p.getQuaternionFromEuler([np.pi/2, 0, 0])
-        # lowerplane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
-        #                              [0, -5, 0],
-        #                              dplane_orientation)
-        # self.p.changeVisualShape(lowerplane, -1, rgbaColor=[1, 0, 0, 0.1])
 
         self.human_state = self.get_state(self.human.racecarUniqueId)
         self.robot_state = self.get_state(self.robot.racecarUniqueId)

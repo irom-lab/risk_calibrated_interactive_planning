@@ -1,5 +1,5 @@
 <?xml version="1.0" ?>
-<robot name="wall">
+<robot name="boundary">
   <link name="baseLink">
      <contact>
       <lateral_friction value="1"/>
@@ -12,16 +12,16 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-				<mesh filename="wall.obj" scale="1 1 1"/>
+				<mesh filename="boundary_long.obj" scale="1 1 1"/>
       </geometry>
-       <material name="white">
-        <color rgba="1 1 1 1"/>
+       <material name="black">
+        <color rgba="0 0 0 1"/>
       </material>
     </visual>
     <collision group="0" mask="0">
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-	 	<box size="2 1 1"/>
+	 	<box size="16 10 1"/>
       </geometry>
     </collision>
   </link>
