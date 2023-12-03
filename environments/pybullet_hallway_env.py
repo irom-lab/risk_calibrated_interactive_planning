@@ -223,7 +223,7 @@ class BulletHallwayEnv(gym.Env):
         # controls = np.array([-self.max_turning_rate, 0, self.max_turning_rate])
         # actions = [controls[a] for a in action]
         actions = action
-        targetvel = -1
+        targetvel = -0.75
         robot_action = np.array([targetvel, action[0]])
         human_action = np.array([targetvel, action[1]])
         same_action_time = 15
@@ -248,7 +248,7 @@ class BulletHallwayEnv(gym.Env):
         violated_dist = any(wall_dist <= 0.25) or any(human_wall_dist <= 0.25)
         if violated_dist:
             self.done = False
-            collision_penalty = 0.05
+            collision_penalty = 0.10
 
         intent_bonus = 0
         intent_corridor_dist = wall_set_distance([rect[:2]], self.human_state)[0]
@@ -566,7 +566,7 @@ class BulletHallwayEnv(gym.Env):
         (dl, dr, du, dlow) = disp
         if dl < 0 and dr < 0:
             human_intent_mismatch = max(dlow, 0) + max(du, 0)
-            if is_human and human_intent_mismatch > 1:
+            if is_human and human_intent_mismatch > 0:
                 return True
             else:
                 return False

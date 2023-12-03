@@ -29,8 +29,8 @@ trigger_sync = TriggerWandbSyncHook()  # <--- New!
 node = platform.node()
 if node == 'mae-majumdar-lab6':
     home = expanduser("~")   # lab desktop
-    num_cpu = 8
-    render = False
+    num_cpu = 1
+    render = True
     debug = False
     online = False
 else:
