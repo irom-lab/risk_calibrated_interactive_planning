@@ -168,6 +168,7 @@ class BulletHallwayEnv(gym.Env):
         self.learning_agent = LearningAgent.HUMAN
         self.cumulative_reward = 0
         self.prev_corridor_dist = 0
+        self.stuck_counter = 0
 
         # Load assets
         self.p.setGravity(0, 0, -9.8)
@@ -209,8 +210,8 @@ class BulletHallwayEnv(gym.Env):
 
         # Boundaries
         uplane_orientation = lplane_orientation = self.p.getQuaternionFromEuler([np.pi/2, 0, 0])
-        ub = self.p.loadURDF(boundarylongpath,[0, UPPER_BOUNDARY, 0], uplane_orientation, useFixedBase=True)
-        lb = self.p.loadURDF(boundarylongpath,[0, LOWER_BOUNDARY, 0], lplane_orientation, useFixedBase=True)
+        ub = self.p.loadURDF(boundarylongpath,[0, UPPER_BOUNDARY+WALL_YLEN/2, 0], uplane_orientation, useFixedBase=True)
+        lb = self.p.loadURDF(boundarylongpath,[0, LOWER_BOUNDARY-WALL_YLEN/2, 0], lplane_orientation, useFixedBase=True)
 
         rplane_orientation = leftplane_orientation = self.p.getQuaternionFromEuler([np.pi/2, 0, 0])
         leftb = self.p.loadURDF(boundaryshortpath,[LEFT_BOUNDARY, 0, 0], rplane_orientation, useFixedBase=True)
@@ -320,6 +321,12 @@ class BulletHallwayEnv(gym.Env):
             self.reward = self.prev_dist_robot - self.dist_robot
             self.reward = np.sign(self.reward)
         self.reward = self.prev_dist_human - self.dist_human + self.prev_dist_robot - self.dist_robot
+        if self.reward <= 0:
+            self.stuck_counter += 1
+        else:
+            self.stuck_counter = 0
+        if self.stuck_counter >= 10:
+            self.done=True
         self.reward = self.reward
         #print(self.reward)
         self.reward += - collision_penalty #+ 10*intent_bonus
