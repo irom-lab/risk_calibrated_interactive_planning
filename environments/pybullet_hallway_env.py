@@ -38,7 +38,7 @@ class LearningAgent(IntEnum):
     HUMAN=0 # Red
     ROBOT=1 # Blue
 
-def collision_with_human(robot_position, human_position, eps=0.5):
+def collision_with_human(robot_position, human_position, eps=1.0):
     col = np.linalg.norm(robot_position[:2] - human_position[:2]) < eps
     return col
 
@@ -197,11 +197,11 @@ class BulletHallwayEnv(gym.Env):
 
         # Goals
         self.human_goal_rect= np.array([-5, 2, 2, 4])
-        self.robot_goal_rect = np.array([4, 2, 2, 4])
+        self.robot_goal_rect = np.array([3, 2, 2, 4])
         goal_orientation = self.p.getQuaternionFromEuler([0, 0, -np.pi / 2])
-        goal1 = self.p.loadURDF(goalpath, [self.robot_goal_rect[0]+WALL_YLEN/2, 0, -0.4999], goal_orientation,
+        goal1 = self.p.loadURDF(goalpath, [self.robot_goal_rect[0]+1, 0, -0.4999], goal_orientation,
                            useFixedBase=True)
-        goal2 = self.p.loadURDF(goalpath, [self.human_goal_rect[0]+WALL_YLEN/2, 0, -0.4999], goal_orientation,
+        goal2 = self.p.loadURDF(goalpath, [self.human_goal_rect[0]+1, 0, -0.4999], goal_orientation,
                            useFixedBase=True)
         self.wall_assets = [wall1, wall2, wall3, wall4]
         self.goal_assets = [goal1, goal2]
@@ -340,9 +340,6 @@ class BulletHallwayEnv(gym.Env):
 
         self.cumulative_reward += self.reward
 
-        print(self.cumulative_reward)
-
-
         info = {}
 
         human_delta_x = self.robot_state[0] - self.human_state[0]
@@ -367,6 +364,28 @@ class BulletHallwayEnv(gym.Env):
                                          np.array([self.dist_robot, self.dist_human])))
         #observation = np.concatenate((self.robot_state, self.human_state))
         observation = {"obs": observation, "mode": np.eye(5)[self.intent]}
+
+        # print(self.walls)
+        # print(self.intent)
+        # print(self.human_state)
+        # print(self.human_goal_rect)
+        # print(self.robot_state)
+        # print(self.robot_goal_rect)
+        # print(human_wall_dist)
+        # print(rect)
+        #
+        # for test_point in np.array([-4, -2, 0, 2, 4]):
+        #     for intent in range(5):
+        #         wall_coord = self.walls[intent]
+        #         wall_left = wall_coord[0]
+        #         wall_right = WALL_XLEN
+        #         wall_up = wall_coord[1] + WALL_YLEN
+        #         wall_down = wall_up - WALL_YLEN
+        #         rect = (wall_left, wall_up, WALL_XLEN, WALL_YLEN)
+        #         wrong_hallway = self.intent_violation(np.array([0, test_point, 0]), rect)
+        #         print(wrong_hallway)
+        #     print()
+
 
         #cv2.imwrite('test.png', observation)
 
@@ -413,7 +432,7 @@ class BulletHallwayEnv(gym.Env):
             human_position = np.array([4, 0])
             human_heading = np.pi + np.array(np.pi)
         else:
-            human_position = np.array([np.random.uniform(low=4, high=7), np.random.uniform(low=-3, high=3)])
+            human_position = np.array([np.random.uniform(low=3.5, high=5.5), np.random.uniform(low=-2, high=2)])
             human_heading = np.pi + np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
         self.human_state = np.array([human_position[0], human_position[1], human_heading], dtype=np.float32)
 
@@ -421,8 +440,8 @@ class BulletHallwayEnv(gym.Env):
             robot_position = np.array([-4, 0])
             robot_heading = np.pi #+ np.array(np.pi/3)
         else:
-            robot_position = np.array([np.random.uniform(low=-7, high=-4), np.random.uniform(low=-3, high=3)])
-            robot_heading = np.pi + np.random.uniform(low=-np.pi/3, high=np.pi/3)
+            robot_position = np.array([np.random.uniform(low=-5.5, high=-3.5), np.random.uniform(low=-2, high=2)])
+            robot_heading = np.pi + np.random.uniform(low=-np.pi/4, high=np.pi/4)
         self.robot_state = np.array([robot_position[0], robot_position[1], robot_heading], dtype=np.float32)
 
         human_orientation = self.p.getQuaternionFromEuler([0, 0, human_heading])
@@ -611,6 +630,8 @@ class BulletHallwayEnv(gym.Env):
                 return True
             else:
                 return False
+
+        return False
 
 
     def render(self):
