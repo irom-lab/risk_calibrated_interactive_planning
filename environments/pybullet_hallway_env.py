@@ -325,12 +325,12 @@ class BulletHallwayEnv(gym.Env):
             self.reward = self.prev_dist_robot - self.dist_robot
             self.reward = np.sign(self.reward)
         self.reward = self.prev_dist_human - self.dist_human + self.prev_dist_robot - self.dist_robot
-        if self.reward <= 0:
-            self.stuck_counter += 1
-        else:
-            self.stuck_counter = 0
-        if self.stuck_counter >= 25:
-            self.done=True
+        # if self.reward <= 0:
+        #     self.stuck_counter += 1
+        # else:
+        #     self.stuck_counter = 0
+        # if self.stuck_counter >= 25:
+        #     self.done=True
         self.reward = self.reward
         #print(self.reward)
         self.reward += - collision_penalty + intent_bonus
@@ -560,6 +560,18 @@ class BulletHallwayEnv(gym.Env):
     def seed_intent(self, intent):
         self.intent = intent
         self.intent_seed = intent
+
+        # TODO(justin.lidard): encapsulate this subroutine
+        wall_coord = self.walls[self.intent]
+        wall_left = wall_coord[0]
+        wall_right = WALL_XLEN
+        wall_up = wall_coord[1] + WALL_YLEN
+        wall_down = wall_up - WALL_YLEN
+        rect = (wall_left, wall_up, WALL_XLEN, WALL_YLEN)
+
+        self.p.resetBasePositionAndOrientation(self.intent_asset,
+                                               [wall_left + WALL_XLEN / 2, wall_up - WALL_YLEN / 2, -0.4999],
+                                               [0, 0, 0, 1])
 
     def dynamics(self, state, other_state, control, is_human=False):
         return self.dubins_car(state, other_state, control, is_human=is_human)
