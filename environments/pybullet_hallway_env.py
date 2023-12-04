@@ -292,7 +292,7 @@ class BulletHallwayEnv(gym.Env):
 
         intent_bonus = 0
         intent_corridor_dist = wall_set_distance([rect[:2]], self.human_state)[0]
-        if self.human_state[0] > wall_left:
+        if self.human_state[0] > wall_right:
             intent_bonus = self.prev_corridor_dist - intent_corridor_dist
         self.prev_corridor_dist = intent_corridor_dist
         # print(intent_bonus)
