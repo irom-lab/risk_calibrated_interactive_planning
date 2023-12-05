@@ -47,7 +47,8 @@ def distance_to_goal(pos, goal_rect):
 
 
 def collision_with_boundaries(robot_pos):
-    if robot_pos[1] >= LOWER_BOUNDARY or robot_pos[1] <= UPPER_BOUNDARY: # robot_pos[0] <= LEFT_BOUNDARY or robot_pos[0] >= RIGHT_BOUNDARY False
+    if robot_pos[1] >= LOWER_BOUNDARY or robot_pos[1] <= UPPER_BOUNDARY or \
+            robot_pos[0] <= LEFT_BOUNDARY or robot_pos[0] >= RIGHT_BOUNDARY:
         return 1
     else:
         return 0
@@ -247,8 +248,8 @@ class HallwayEnv(gym.Env):
             self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
             observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing*100]),
                                          human_wall_dist, robot_wall_dist,
-                                         human_wall_dist[self.intent:self.intent+1],
-                                         robot_wall_dist[self.intent:self.intent+1],
+                                         wall_set_distance([rect], self.human_state),
+                                         wall_set_distance([rect], self.robot_state),
                                          self.robot_state[-1:]*100, self.human_state[-1:]*100,
                                          np.array([self.dist_robot, self.dist_human])))
             observation /= 100
@@ -257,6 +258,8 @@ class HallwayEnv(gym.Env):
 
         #cv2.imwrite('test.png', observation)
 
+        wall_set_distance([rect], self.human_state),
+        wall_set_distance([rect], self.robot_state),
         return observation, self.reward, self.done, truncated, info
 
     def reset(self, seed=1234, options={}):
@@ -339,6 +342,14 @@ class HallwayEnv(gym.Env):
         self.prev_reward = self.reward
         self.cumulative_reward = 0
 
+        # Don't allow collisions, but allow the robot to turn around.
+        wall_coord = self.walls[self.intent]
+        wall_left = wall_coord[0]
+        wall_right = WALL_XLEN
+        wall_up = wall_coord[1] - WALL_YLEN
+        wall_down = wall_up + WALL_YLEN
+        rect = (wall_left, wall_up, WALL_XLEN, WALL_YLEN)
+
         if self.rgb_observation:
             self.get_image(resolution_scale=1)
             # from PIL import Image
@@ -359,8 +370,8 @@ class HallwayEnv(gym.Env):
             self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
             observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing*100]),
                                          human_wall_dist, robot_wall_dist,
-                                         human_wall_dist[self.intent:self.intent+1],
-                                         robot_wall_dist[self.intent:self.intent+1],
+                                         wall_set_distance([rect], self.human_state),
+                                         wall_set_distance([rect], self.robot_state),
                                          self.robot_state[-1:]*100, self.human_state[-1:]*100,
                                          np.array([self.dist_robot, self.dist_human])))
             observation /= 100

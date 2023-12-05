@@ -45,6 +45,9 @@ def collision_with_human(robot_position, human_position, eps=1.0):
 def distance_to_goal(pos, goal_rect):
     return rect_set_dist(goal_rect, pos)
 
+def distance_to_goal_l2(pos, goal):
+    return np.linalg.norm(pos[:2] - goal[:2])
+
 
 def collision_with_boundaries(robot_pos):
     if robot_pos[0] <= LEFT_BOUNDARY or robot_pos[0] >= RIGHT_BOUNDARY or \
@@ -139,7 +142,7 @@ class BulletHallwayEnv(gym.Env):
         num_latent_vars = len(HumanIntent)
         self.num_latent_vars = num_latent_vars
         self.max_turning_rate = max_turning_rate
-        self.action_space = spaces.Box(low=-max_turning_rate, high=max_turning_rate, shape=(2,))
+        self.action_space = spaces.Box(low=-max_turning_rate, high=max_turning_rate, shape=(4,))
         # self.action_space = spaces.MultiDiscrete(nvec=[3, 3])
         self.obs_seq_len = obs_seq_len
         self.state_dim = state_dim
@@ -221,6 +224,7 @@ class BulletHallwayEnv(gym.Env):
         leftb = self.p.loadURDF(boundaryshortpath,[LEFT_BOUNDARY, 0, 0], rplane_orientation, useFixedBase=True)
         rightb = self.p.loadURDF(boundaryshortpath,[RIGHT_BOUNDARY,0, 0], leftplane_orientation, useFixedBase=True)
         self.boundary_assets = [ub, lb, leftb, rightb]
+        self.tid = None
 
 
         # upperplane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
@@ -263,9 +267,15 @@ class BulletHallwayEnv(gym.Env):
         # actions = [controls[a] for a in action]
         actions = action
         action_scale = 1
-        targetvel = -1.5
-        robot_action = np.array([targetvel, action_scale*action[0]])
-        human_action = np.array([targetvel, action_scale*action[1]])
+        accel_neg_clip_val = 2.0
+        if action[2] > accel_neg_clip_val:
+            action[2] = accel_neg_clip_val
+        if action[3] > accel_neg_clip_val:
+            action[3] = accel_neg_clip_val
+        # targetvel = -1.5
+        action[2]
+        robot_action = np.array([action[2], action_scale*action[0]])
+        human_action = np.array([action[3], action_scale*action[1]])
         same_action_time = 5
         for _ in range(same_action_time):
             self.robot.applyAction(robot_action)
@@ -358,8 +368,8 @@ class BulletHallwayEnv(gym.Env):
             self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
             observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing]),
                                          human_wall_dist, robot_wall_dist,
-                                         human_wall_dist[self.intent:self.intent+1],
-                                         robot_wall_dist[self.intent:self.intent+1],
+                                         wall_set_distance([rect], self.human_state),
+                                         wall_set_distance([rect], self.robot_state),
                                          self.robot_state[-1:], self.human_state[-1:],
                                          np.array([self.dist_robot, self.dist_human])))
         #observation = np.concatenate((self.robot_state, self.human_state))
@@ -388,6 +398,11 @@ class BulletHallwayEnv(gym.Env):
 
 
         #cv2.imwrite('test.png', observation)
+
+        if self.display_render:
+            if self.tid is not None:
+                self.p.removeUserDebugItem(self.tid)
+            self.tid = self.p.addUserDebugText(f"Reward: {self.cumulative_reward}", [0, 0, 2], textSize=5, textColorRGB=[0, 0, 0])
 
         return observation, self.reward, self.done, truncated, info
 
@@ -533,8 +548,8 @@ class BulletHallwayEnv(gym.Env):
             self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
             observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing]),
                                          human_wall_dist, robot_wall_dist,
-                                         human_wall_dist[self.intent:self.intent+1],
-                                         robot_wall_dist[self.intent:self.intent+1],
+                                         wall_set_distance([rect], self.human_state),
+                                         wall_set_distance([rect], self.robot_state),
                                          self.robot_state[-1:], self.human_state[-1:],
                                          np.array([self.dist_robot, self.dist_human])))
         #print(observation.shape)
