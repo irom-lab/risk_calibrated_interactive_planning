@@ -33,7 +33,7 @@ if node == 'mae-majumdar-lab6' or node == "jlidard":
     render = True
     debug = False
     online = False
-elif platform == "mae-ani-lambda":
+elif platform == 'mae-ani-lambda':
     home = expanduser("~")   # della fast IO file system
     num_cpu = 128
     render = False
