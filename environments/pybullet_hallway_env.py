@@ -267,15 +267,15 @@ class BulletHallwayEnv(gym.Env):
         # actions = [controls[a] for a in action]
         actions = action
         action_scale = 1
-        accel_neg_clip_val = 2.0
-        if action[2] > accel_neg_clip_val:
-            action[2] = accel_neg_clip_val
-        if action[3] > accel_neg_clip_val:
-            action[3] = accel_neg_clip_val
+        # accel_neg_clip_val = 2.0
+        # if action[2] > accel_neg_clip_val:
+        #     action[2] = accel_neg_clip_val
+        # if action[3] > accel_neg_clip_val:
+        #     action[3] = accel_neg_clip_val
         # targetvel = -1.5
-        action[2]
-        robot_action = np.array([action[2], action_scale*action[0]])
-        human_action = np.array([action[3], action_scale*action[1]])
+        action_offset = -1
+        robot_action = np.array([action_offset+action[2], action_scale*action[0]])
+        human_action = np.array([action_offset+action[3], action_scale*action[1]])
         same_action_time = 5
         for _ in range(same_action_time):
             self.robot.applyAction(robot_action)
@@ -298,7 +298,7 @@ class BulletHallwayEnv(gym.Env):
         violated_dist = any(wall_dist <= 0.25) or any(human_wall_dist <= 0.25)
         if violated_dist:
             self.done = False
-            collision_penalty = 0.01
+            collision_penalty = 0.001
 
         intent_bonus = 0
         intent_corridor_dist = wall_set_distance([rect[:2]], self.human_state)[0]
@@ -309,11 +309,11 @@ class BulletHallwayEnv(gym.Env):
 
         if collision_with_human(self.robot_state, self.human_state):
             self.done = True
-            collision_penalty = 1
+            #collision_penalty = 1
 
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1:
             self.done = False
-            collision_penalty = 0.01
+            collision_penalty = 0.001
 
         if wrong_hallway:
             self.done = True
