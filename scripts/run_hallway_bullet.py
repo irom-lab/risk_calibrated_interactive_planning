@@ -33,7 +33,7 @@ if node == 'mae-majumdar-lab6' or node == "jlidard":
     render = True
     debug = False
     online = False
-elif platform == 'mae-ani-lambda':
+elif node == 'mae-ani-lambda':
     home = expanduser("~")   # della fast IO file system
     num_cpu = 128
     render = False
@@ -45,7 +45,6 @@ else:
     render = False
     debug = False
     online = False
-print(platform.node())
 
 models_dir = f"{home}/PredictiveRL/models/{int(time.time())}/"
 logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")

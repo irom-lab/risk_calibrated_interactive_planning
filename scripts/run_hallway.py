@@ -33,6 +33,12 @@ if node == 'mae-majumdar-lab6' or node == "jlidard":
     render = True
     debug = False
     online = False
+elif node == 'mae-ani-lambda':
+    home = expanduser("~")  # della fast IO file system
+    num_cpu = 128
+    render = False
+    debug = False
+    online = True
 else:
     home = '/scratch/gpfs/jlidard/'  # della fast IO file system
     num_cpu = 128
