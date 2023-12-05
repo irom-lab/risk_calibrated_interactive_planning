@@ -45,6 +45,7 @@ else:
     render = False
     debug = False
     online = False
+print(platform)
 
 models_dir = f"{home}/PredictiveRL/models/{int(time.time())}/"
 logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
