@@ -37,7 +37,7 @@ if node == 'mae-majumdar-lab6' or node == "jlidard":
 elif node == 'mae-ani-lambda':
     home = expanduser("~")   # della fast IO file system
     num_cpu = 128
-    max_steps = 300
+    max_steps = 200
     render = False
     debug = False
     online = True
