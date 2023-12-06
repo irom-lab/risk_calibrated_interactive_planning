@@ -58,7 +58,7 @@ if __name__ == ("__main__"):
     max_steps = 300
     learn_steps = 25000
     save_freq = 100000
-    n_iters=1000
+    n_iters=100000
     video_length=max_steps
     timesteps = max_steps
 
