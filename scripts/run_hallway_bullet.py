@@ -30,18 +30,21 @@ node = platform.node()
 if node == 'mae-majumdar-lab6' or node == "jlidard":
     home = expanduser("~")   # lab desktop
     num_cpu = 1
+    max_steps = 300
     render = True
     debug = False
     online = False
 elif node == 'mae-ani-lambda':
     home = expanduser("~")   # della fast IO file system
     num_cpu = 128
+    max_steps = 300
     render = False
     debug = False
     online = True
 else:
     home = '/scratch/gpfs/jlidard/'  # della fast IO file system
     num_cpu = 128
+    max_steps = 300
     render = False
     debug = False
     online = False
@@ -55,7 +58,6 @@ rgb_observation = False
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
     episodes = 1
-    max_steps = 300
     learn_steps = 25000
     save_freq = 100000
     n_iters=100000

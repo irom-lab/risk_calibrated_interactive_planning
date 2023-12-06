@@ -16,8 +16,8 @@ from pybullet_utils import bullet_client as bc
 import pybullet_data
 from pkg_resources import parse_version
 
-LEFT_BOUNDARY = -8
-RIGHT_BOUNDARY = 8
+LEFT_BOUNDARY = -7
+RIGHT_BOUNDARY = 7
 UPPER_BOUNDARY = 4.5
 LOWER_BOUNDARY = -4.5
 
@@ -38,7 +38,7 @@ class LearningAgent(IntEnum):
     HUMAN=0 # Red
     ROBOT=1 # Blue
 
-def collision_with_human(robot_position, human_position, eps=1.0):
+def collision_with_human(robot_position, human_position, eps=0.5):
     col = np.linalg.norm(robot_position[:2] - human_position[:2]) < eps
     return col
 
@@ -49,9 +49,8 @@ def distance_to_goal_l2(pos, goal):
     return np.linalg.norm(pos[:2] - goal[:2])
 
 
-def collision_with_boundaries(robot_pos):
-    if robot_pos[0] <= LEFT_BOUNDARY or robot_pos[0] >= RIGHT_BOUNDARY or \
-            robot_pos[1] <= LOWER_BOUNDARY or robot_pos[1] >= UPPER_BOUNDARY:
+def collision_with_boundaries(robot_pos, eps=0.76):
+    if robot_pos[0] <= LEFT_BOUNDARY+eps or robot_pos[0] >= RIGHT_BOUNDARY-eps: #robot_pos[1] <= LOWER_BOUNDARY+eps or robot_pos[1] >= UPPER_BOUNDARY-eps or \
         return 1
     else:
         return 0
@@ -314,7 +313,7 @@ class BulletHallwayEnv(gym.Env):
             #collision_penalty = 1
 
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1:
-            self.done = False
+            self.done = True
             collision_penalty = 0.000
 
         if wrong_hallway:
