@@ -196,8 +196,8 @@ class HallwayEnv(gym.Env):
             collision_penalty += 1
 
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1:
-            self.done = False
-            collision_penalty += 0.01
+            self.done = True
+            collision_penalty += 0
 
         if wrong_hallway:
             self.done = True
@@ -210,6 +210,9 @@ class HallwayEnv(gym.Env):
         human_intent_mismatch_penalty = 0
         self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
         self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
+        human_reach_bonus = 1 if self.dist_human == 0 else 0
+        robot_reach_bonus = 1 if self.dist_robot == 0 else 0
+        reach_bonus = human_reach_bonus + robot_reach_bonus
         self.robot_distance = np.linalg.norm(self.robot_state[:2] - self.robot_goal_rect[:2])
         self.human_distance = np.linalg.norm(self.human_state[:2] - self.human_goal_rect[:2])
         if self.learning_agent == LearningAgent.HUMAN:
@@ -221,7 +224,7 @@ class HallwayEnv(gym.Env):
         self.reward = self.prev_dist_human - self.dist_human + self.prev_dist_robot - self.dist_robot
         self.reward = self.reward / 100
         #print(self.reward)
-        self.reward += - collision_penalty
+        self.reward += - collision_penalty + reach_bonus
         self.prev_reward = self.reward
         self.prev_dist_robot = self.dist_robot
         self.prev_dist_human = self.dist_human
@@ -257,7 +260,6 @@ class HallwayEnv(gym.Env):
         observation = {"obs": observation, "mode": np.eye(5)[self.intent]}
 
         #cv2.imwrite('test.png', observation)
-
         wall_set_distance([rect], self.human_state),
         wall_set_distance([rect], self.robot_state),
         return observation, self.reward, self.done, truncated, info
@@ -417,16 +419,16 @@ class HallwayEnv(gym.Env):
         wall_dist = wall_set_distance(self.walls, new_state)
         violated_dist = any(wall_dist <= 0)
         valid_transition = True
-        if collision_with_boundaries(new_state) or violated_dist: #or intent_violation(new_state):
+        if violated_dist: #or intent_violation(new_state):
             new_state_x = np.array([xnew, y])
             new_state_y = np.array([x, ynew])
             wall_dist_x = wall_set_distance(self.walls, new_state_x)
             violated_dist_x = any(wall_dist_x <= 0)
             wall_dist_y = wall_set_distance(self.walls, new_state_y)
             violated_dist_y = any(wall_dist_y <= 0)
-            if not(collision_with_boundaries(new_state_x) or violated_dist_x):# or intent_violation(new_state_x)):
+            if not(violated_dist_x):# or intent_violation(new_state_x)):
                 ynew = y
-            elif not(collision_with_boundaries(new_state_y) or violated_dist_y):# or intent_violation(new_state_y)):
+            elif not( violated_dist_y):# or intent_violation(new_state_y)):
                 xnew = x
             else:
                 xnew = x
