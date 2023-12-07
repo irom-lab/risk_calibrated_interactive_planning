@@ -26,12 +26,42 @@ loaddir = os.path.join(home, f"PredictiveRL/logs/{model_num}/best_model.zip")
 logdir = os.path.join(home, f"PredictiveRL/conformal_outputs/{int(time.time())}/")
 dataframe_path = os.path.join(home, f"PredictiveRL/conformal_outputs/{int(time.time())}.csv")
 
+
+def plot_figures(non_conformity_score):
+    epsilon = 0.15
+    num_calibration = 100  # fake!
+    q_level = np.ceil((num_calibration + 1) * (1 - epsilon)) / num_calibration
+    qhat = np.quantile(non_conformity_score, q_level, method='higher')
+    print('Quantile value qhat:', qhat)
+    print('')
+
+    # plot histogram and quantile
+    plt.figure(figsize=(6, 2))
+    plt.hist(non_conformity_score, bins=30, edgecolor='k', linewidth=1)
+    plt.axvline(
+        x=qhat, linestyle='--', color='r', label='Quantile value'
+    )
+    plt.title(
+        'Histogram of non-comformity scores in the calibration set'
+    )
+    plt.xlabel('Non-comformity score')
+    plt.legend()
+    plt.savefig('2d_hallway_non_conformity.png')
+    print('')
+    print('A good predictor should have low non-comformity scores, concentrated at the left side of the figure')
+
+
+
 render = False
 debug = False
 rgb_observation = True
 online = False
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
+
+    test_vec = [0.8, 0.4, 0.3, 0.5, 0.4]
+    plot_figures(test_vec)
+
     episodes = 1
     num_cpu = 1  # Number of processes to use
     max_steps = 200
@@ -44,15 +74,15 @@ if __name__ == ("__main__"):
     # Create the vectorized environment
     env = HallwayEnv(render=render, debug=debug, time_limit=max_steps, rgb_observation=rgb_observation)
 
-    if online:
-        wandb.init(
-            project="conformal_rl",
-        )
-    else:
-        wandb.init(
-            project="conformal_rl",
-            mode="offline"
-        )
+    # if online:
+    #     wandb.init(
+    #         project="conformal_rl",
+    #     )
+    # else:
+    #     wandb.init(
+    #         project="conformal_rl",
+    #         mode="offline"
+    #     )
 
     print('Training Policy.')
     policy_kwargs = dict(net_arch=dict(pi=[64, 64], vf=[64, 64]))
@@ -104,27 +134,9 @@ if __name__ == ("__main__"):
         if index % 25 == 0:
             print(f"Done {index} of {num_calibration}.")
 
-    epsilon = 0.15
-    num_calibration = 100 # fake!
-    q_level = np.ceil((num_calibration + 1) * (1 - epsilon)) / num_calibration
-    qhat = np.quantile(non_conformity_score, q_level, method='higher')
-    print('Quantile value qhat:', qhat)
-    print('')
+    plot_figures(non_conformity_score)
 
-    # plot histogram and quantile
-    plt.figure(figsize=(6, 2))
-    plt.hist(non_conformity_score, bins=30, edgecolor='k', linewidth=1)
-    plt.axvline(
-        x=qhat, linestyle='--', color='r', label='Quantile value'
-    )
-    plt.title(
-        'Histogram of non-comformity scores in the calibration set'
-    )
-    plt.xlabel('Non-comformity score')
-    plt.legend()
-    plt.savefig('2d_hallway_non_conformity.png')
-    print('')
-    print('A good predictor should have low non-comformity scores, concentrated at the left side of the figure')
+
 
 
 
