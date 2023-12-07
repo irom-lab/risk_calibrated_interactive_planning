@@ -419,16 +419,16 @@ class HallwayEnv(gym.Env):
         wall_dist = wall_set_distance(self.walls, new_state)
         violated_dist = any(wall_dist <= 0)
         valid_transition = True
-        if violated_dist: #or intent_violation(new_state):
+        if collision_with_boundaries(new_state) or violated_dist: #or intent_violation(new_state):
             new_state_x = np.array([xnew, y])
             new_state_y = np.array([x, ynew])
             wall_dist_x = wall_set_distance(self.walls, new_state_x)
             violated_dist_x = any(wall_dist_x <= 0)
             wall_dist_y = wall_set_distance(self.walls, new_state_y)
             violated_dist_y = any(wall_dist_y <= 0)
-            if not(violated_dist_x):# or intent_violation(new_state_x)):
+            if not(collision_with_boundaries(new_state_x) or violated_dist_x):# or intent_violation(new_state_x)):
                 ynew = y
-            elif not( violated_dist_y):# or intent_violation(new_state_y)):
+            elif not(collision_with_boundaries(new_state_y) or violated_dist_y):# or intent_violation(new_state_y)):
                 xnew = x
             else:
                 xnew = x

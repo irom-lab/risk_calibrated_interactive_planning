@@ -313,7 +313,7 @@ class BulletHallwayEnv(gym.Env):
             #collision_penalty = 1
 
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1:
-            self.done = True
+            self.done = False
             collision_penalty = 0.000
 
         if wrong_hallway:
@@ -328,7 +328,7 @@ class BulletHallwayEnv(gym.Env):
         self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
         self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
         human_reach_bonus = 1 if self.dist_human == 0 else 0
-        robot_reach_bonus = 1 if self.dist_robot == 0 else 0
+        robot_reach_bonus = 0.1 if self.dist_robot == 0 else 0
         reach_bonus = human_reach_bonus + robot_reach_bonus
         self.robot_distance = np.linalg.norm(self.robot_state[:2] - self.robot_goal_rect[:2])
         self.human_distance = np.linalg.norm(self.human_state[:2] - self.human_goal_rect[:2])
@@ -347,7 +347,7 @@ class BulletHallwayEnv(gym.Env):
         #     self.done=True
         self.reward = self.reward
         #print(self.reward)
-        self.reward += - collision_penalty + reach_bonus + intent_bonus*10
+        self.reward += - collision_penalty + reach_bonus #+ intent_bonus*10
         self.prev_reward = self.reward
         self.prev_dist_robot = self.dist_robot
         self.prev_dist_human = self.dist_human
