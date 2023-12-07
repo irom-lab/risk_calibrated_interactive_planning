@@ -197,7 +197,7 @@ class HallwayEnv(gym.Env):
 
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1:
             self.done = False
-            collision_penalty += 0.01
+            collision_penalty += 0.0
 
         if wrong_hallway:
             self.done = True
