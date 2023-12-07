@@ -114,7 +114,7 @@ if __name__ == ("__main__"):
                 model.save(os.path.join(models_dir, f"model_best_{iter}"))
 
         if iter % 100 == 0:
-            record_video(videnv, model, video_length=video_length)
+            record_video(videnv, model, video_length=video_length, num_videos=1)
 
         wandb.log(training_dict)
         if not online:

@@ -2,9 +2,9 @@ from environments.hallway_env import HumanIntent
 import numpy as np
 
 # record video
-def record_video(videnv, model, video_length=200):
+def record_video(videnv, model, video_length=200, num_videos=3):
     print('Recording videos...')
-    for intent in range(3):
+    for intent in range(num_videos):
         obs = videnv.reset()
         intent=np.random.choice(5)
         videnv.env.envs[0].seed_intent(HumanIntent(intent))
