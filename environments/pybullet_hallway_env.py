@@ -347,7 +347,7 @@ class BulletHallwayEnv(gym.Env):
         #     self.done=True
         self.reward = self.reward
         #print(self.reward)
-        self.reward += - collision_penalty + reach_bonus #+ intent_bonus*10
+        self.reward += - collision_penalty + reach_bonus + intent_bonus*2
         self.prev_reward = self.reward
         self.prev_dist_robot = self.dist_robot
         self.prev_dist_human = self.dist_human

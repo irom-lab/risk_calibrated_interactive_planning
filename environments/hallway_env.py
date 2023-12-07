@@ -155,6 +155,9 @@ class HallwayEnv(gym.Env):
         self.time_limit = time_limit
         self.learning_agent = LearningAgent.HUMAN
         self.cumulative_reward = 0
+        self.reward = 0
+        self.intent_bonus = 0
+        self.cumulative_intent_bonus = 0
 
     def state_history_numpy(self):
         state_history = np.array(self.prev_states).flatten()
@@ -207,6 +210,12 @@ class HallwayEnv(gym.Env):
             truncated = True
 
         # Compute reward
+        self.intent_bonus = 0
+        intent_corridor_dist = wall_set_distance([rect[:2]], self.human_state)[0]
+        if self.human_state[0] < wall_left:
+            self.intent_bonus = self.prev_corridor_dist - intent_corridor_dist
+        self.prev_corridor_dist = intent_corridor_dist
+        self.cumulative_intent_bonus += self.intent_bonus/100  * 2
         human_intent_mismatch_penalty = 0
         self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
         self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
@@ -224,7 +233,7 @@ class HallwayEnv(gym.Env):
         self.reward = self.prev_dist_human - self.dist_human + self.prev_dist_robot - self.dist_robot
         self.reward = self.reward / 100
         #print(self.reward)
-        self.reward += - collision_penalty + reach_bonus
+        self.reward += - collision_penalty + reach_bonus + self.intent_bonus/100
         self.prev_reward = self.reward
         self.prev_dist_robot = self.dist_robot
         self.prev_dist_human = self.dist_human
@@ -343,6 +352,7 @@ class HallwayEnv(gym.Env):
         #print(self.reward)
         self.prev_reward = self.reward
         self.cumulative_reward = 0
+        self.cumulative_intent_bonus = 0
 
         # Don't allow collisions, but allow the robot to turn around.
         wall_coord = self.walls[self.intent]
@@ -351,6 +361,7 @@ class HallwayEnv(gym.Env):
         wall_up = wall_coord[1] - WALL_YLEN
         wall_down = wall_up + WALL_YLEN
         rect = (wall_left, wall_up, WALL_XLEN, WALL_YLEN)
+        self.prev_corridor_dist = wall_set_distance([rect[:2]], self.human_state)[0]
 
         if self.rgb_observation:
             self.get_image(resolution_scale=1)
@@ -517,13 +528,13 @@ class HallwayEnv(gym.Env):
         self.img = cv2.flip(self.img, 1)
         self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2RGB)
 
-        if self.learning_agent == LearningAgent.HUMAN:
-            la_str = "Red"
-        else:
-            la_str = "Blue"
-        str = f"Learning agent: Both"
-        cv2.putText(display_img, str, (1300*resolution_scale, 75*resolution_scale),
-                    self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
+        # if self.learning_agent == LearningAgent.HUMAN:
+        #     la_str = "Red"
+        # else:
+        #     la_str = "Blue"
+        # str = f"Learning agent: Both"
+        # cv2.putText(display_img, str, (1300*resolution_scale, 75*resolution_scale),
+        #             self.font, 0.75*resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
 
         for img in [self.img, display_img]:
 
@@ -535,6 +546,10 @@ class HallwayEnv(gym.Env):
 
             str = f"Cumulative reward: {self.cumulative_reward}"
             cv2.putText(img, str, (1300 * resolution_scale, 50 * resolution_scale),
+                        self.font, 0.75 * resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
+
+            str = f"Intent bonus: {self.cumulative_intent_bonus}"
+            cv2.putText(img, str, (1300 * resolution_scale, 75 * resolution_scale),
                         self.font, 0.75 * resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
 
             for i, wall in enumerate(self.walls):
