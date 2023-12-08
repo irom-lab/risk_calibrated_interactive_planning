@@ -50,7 +50,7 @@ else:
     debug = False
     online = False
 
-device = "cpu" # "cuda" if torch.cuda.is_available() else "cpu"
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 models_dir = f"{home}/PredictiveRL/models/{int(time.time())}/"
 logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
@@ -112,7 +112,7 @@ if __name__ == ("__main__"):
         training_dict["time/epochs"] = iter
         training_dict["time/mean_episode_length"] = ep_mean_len
 
-        if iter % 100 == 0:
+        if iter % 25 == 0:
             model.save(os.path.join(models_dir, f"epoch_{iter}"))
 
             if ep_mean_reward >= best_mean_reward:
