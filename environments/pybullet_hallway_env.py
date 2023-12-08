@@ -73,7 +73,7 @@ class LearningAgent(IntEnum):
     HUMAN=0 # Red
     ROBOT=1 # Blue
 
-def collision_with_human(robot_position, human_position, eps=0.5):
+def collision_with_human(robot_position, human_position, eps=1):
     col = np.linalg.norm(robot_position[:2] - human_position[:2]) < eps
     return col
 
@@ -348,7 +348,7 @@ class BulletHallwayEnv(gym.Env):
         # print(intent_bonus)
 
         if collision_with_human(self.robot_state, self.human_state):
-            self.done = False
+            self.done = True
             #collision_penalty = 1
 
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1:
@@ -482,7 +482,7 @@ class BulletHallwayEnv(gym.Env):
         # Initial robot and human position
         if self.debug:
             human_position = np.array([4, 0])
-            human_heading = np.pi + np.array(np.pi)
+            human_heading = np.pi + np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
         else:
             human_position = np.array([np.random.uniform(low=3.5, high=5.5), np.random.uniform(low=-2, high=2)])
             human_heading = np.pi + np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
@@ -490,7 +490,7 @@ class BulletHallwayEnv(gym.Env):
 
         if self.debug:
             robot_position = np.array([-4, 0])
-            robot_heading = np.pi #+ np.array(np.pi/3)
+            robot_heading = np.pi + np.random.uniform(low=-np.pi/4, high=np.pi/4)
         else:
             robot_position = np.array([np.random.uniform(low=-5.5, high=-3.5), np.random.uniform(low=-2, high=2)])
             robot_heading = np.pi + np.random.uniform(low=-np.pi/4, high=np.pi/4)

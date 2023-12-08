@@ -33,14 +33,14 @@ if node == 'mae-majumdar-lab6' or node == "jlidard":
     num_cpu = 1
     max_steps = 300
     render = True
-    debug = False
+    debug = True
     online = False
 elif node == 'mae-ani-lambda':
     home = expanduser("~")   # della fast IO file system
     num_cpu = 128
     max_steps = 200
     render = False
-    debug = False
+    debug = True
     online = True
 else:
     home = '/scratch/gpfs/jlidard/'  # della fast IO file system
