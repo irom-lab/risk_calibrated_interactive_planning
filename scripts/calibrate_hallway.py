@@ -19,7 +19,7 @@ trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
 home = expanduser("~")
 
-model_num = 1700523344  # Best kinematic
+model_num = 1701988934  # Best kinematic
 model_num = 1700717235  # Best RGB
 
 loaddir = os.path.join(home, f"PredictiveRL/logs/{model_num}/best_model.zip")
@@ -58,9 +58,6 @@ rgb_observation = True
 online = False
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
-
-    test_vec = [0.8, 0.4, 0.3, 0.5, 0.4]
-    plot_figures(test_vec)
 
     episodes = 1
     num_cpu = 1  # Number of processes to use
@@ -136,6 +133,8 @@ if __name__ == ("__main__"):
 
     plot_figures(non_conformity_score)
 
+def hoeffding_bentkus(risk_values):
+    pass
 
 
 

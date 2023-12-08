@@ -50,7 +50,7 @@ else:
     debug = False
     online = False
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cpu" # "cuda" if torch.cuda.is_available() else "cpu"
 
 models_dir = f"{home}/PredictiveRL/models/{int(time.time())}/"
 logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")

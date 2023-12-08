@@ -18,8 +18,8 @@ WALL_YLEN = 100
 
 # VLM prompt for this env
 prompt = "This is a metaphorical and fictitious cartoon of a human navigating a room with 5 hallways numbered 0-4. " \
-          "The human is represented by the red triangle. The human's heading is given by the pointy end of the "\
-          "traingle. The human could enter one of five numbered hallways in the center of the screen. The human will"\
+          "The human is represented by the red triangle on the right. The human's heading is given by the pointy end of the "\
+          "triangle. The human could enter one of five numbered hallways in the center of the screen. The human will"\
         "prefer hallways that are closer and aligned with the human's heading. What hallway is the human closest to?" \
          "What hallway is the human pointing towards? Based on the human's current position and heading, which" \
          "hallway(s) is the human likely to enter? Give approximate numeric probabilities for all hallways 0-4," \
@@ -220,7 +220,7 @@ class HallwayEnv(gym.Env):
         self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
         self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
         human_reach_bonus = 1 if self.dist_human == 0 else 0
-        robot_reach_bonus = 0.1 if self.dist_robot == 0 else 0
+        robot_reach_bonus = 1 if self.dist_robot == 0 else 0
         reach_bonus = human_reach_bonus + robot_reach_bonus
         self.robot_distance = np.linalg.norm(self.robot_state[:2] - self.robot_goal_rect[:2])
         self.human_distance = np.linalg.norm(self.human_state[:2] - self.human_goal_rect[:2])

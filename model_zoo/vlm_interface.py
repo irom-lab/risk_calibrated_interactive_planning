@@ -81,7 +81,7 @@ def hallway_parse_response(response):
     response_str = response.json()["choices"][0]["message"]["content"]
     print(response_str)
     probs = re.findall(r"[-+]?(?:\d*\.*\d+)%", response_str)
-    probs = [int(x.split('%')[0]) for x in probs]
+    probs = [float(x.split('%')[0]) for x in probs]
     return np.array(probs)
 
 if __name__ == "__main__":

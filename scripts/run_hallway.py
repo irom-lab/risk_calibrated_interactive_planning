@@ -35,7 +35,7 @@ if node == 'mae-majumdar-lab6' or node == "jlidard":
     online = False
 elif node == 'mae-ani-lambda':
     home = expanduser("~")  # della fast IO file system
-    num_cpu = 128
+    num_cpu = 32
     render = False
     debug = False
     online = True
@@ -46,7 +46,7 @@ else:
     debug = False
     online = False
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cpu" # "cuda" if torch.cuda.is_available() else "cpu"
 
 models_dir = f"{home}/PredictiveRL/models/{int(time.time())}/"
 logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
