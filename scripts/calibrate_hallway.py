@@ -26,9 +26,9 @@ if not use_bullet:
     model_num = 1700717235  # Best RGB
     model_num = 1701999480  # Best kinematic
 else:
-    model_num = 1701988944 # 300 from 3d hallway
+    model_num = 1702013145 # 300 from 3d hallway
 
-loaddir = os.path.join(home, f"PredictiveRL/models/{model_num}/epoch_600.zip")
+loaddir = os.path.join(home, f"PredictiveRL/models/{model_num}/epoch_25.zip")
 logdir = os.path.join(home, f"PredictiveRL/conformal_outputs/{int(time.time())}/")
 dataframe_path = os.path.join(home, f"PredictiveRL/conformal_outputs/{int(time.time())}.csv")
 
@@ -63,7 +63,7 @@ def plot_figures(non_conformity_score, is_bullet=False):
 
 
 render = False
-debug = False
+debug = True
 rgb_observation = False
 online = False
 # 'if __name__' Necessary for multithreading
@@ -109,7 +109,7 @@ if __name__ == ("__main__"):
         intent = np.random.choice(5)
         env.seed_intent(HumanIntent(intent))
         total_reward = 0
-        episode_length_actual = video_length//5 #np.random.randint(low=video_length/10, high=video_length/5)
+        episode_length_actual = video_length//4+5 #np.random.randint(low=video_length/10, high=video_length/5)
         observation_list = []
         # rollout to a random timepoint
         for i in range(episode_length_actual):
@@ -149,7 +149,8 @@ if __name__ == ("__main__"):
             img = Image.fromarray(context[k], 'RGB')
             img.save(save_path)
         response = vlm(prompt=prompt, image_path=image_path) # response_str = response.json()["choices"][0]["message"]["content"]
-        probs = hallway_parse_response(response)/100
+        probs = hallway_parse_response(response)
+        probs = probs/probs.sum()
         true_label_smx = probs[label]
         # extract probs
         non_conformity_score.append(1 - true_label_smx)

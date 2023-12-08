@@ -41,21 +41,29 @@ WALL_YLEN = 1
 #     "hallways are the right car likely to enter? Give approximate numeric probabilities for all hallways 0-4," \
 #     " in order starting with 0. Hallway 0 is at the top."
 
-# prompt = "This is a metaphorical scenario of two toy cars navigating a room with 5 hallways numbered 0-4. " \
-#     "This is a set of images from the scenario. Focus on the part of the images labeled Ego car." \
-#     "The Ego car is current heading towards a set of hallways, and could take any of them." \
-#     "Based on the Ego car's trajectory, which of the hallways is it going towards?" \
-#     "Give approximate numerical probabilities for all hallways 0-4 as a bulleted list and explain each one." \
-#     "Never give higher than 60% and lower than 10% since it's always best to be a little skeptical." \
-#     "Always give adjacent hallways to your most-likely prediction a near-equal weight"
-
 prompt = "This is a metaphorical scenario of two toy cars navigating a room with 5 hallways numbered 0-4. " \
-    "This is a set of images from the scenario. Focus on the part of the images labeled Ego car." \
+    "This is a set of images from the scenario." \
     "The Ego car is current heading towards a set of hallways, and could take any of them." \
-    "Describe the Ego car's motion: is it turning towards the label 0, 1, 2, 3, or 4?" \
-    "Now, give approximate numerical probabilities for all hallways 0-4 as a bulleted list and explain each one." \
-    "Never give higher than 90% and lower than 5% since it's always best to be a little skeptical." \
+    "Based on the Ego car's trajectory, which of the hallways is it going towards?" \
+    "Give approximate numerical probabilities for all hallways 0-4 as a bulleted list and explain each one." \
+    "Never give higher than 80% and lower than 10% since it's always best to be a little skeptical." \
     "Always give adjacent hallways to your most-likely prediction a near-equal weight"
+
+# prompt = "This is a metaphorical scenario of two toy cars navigating a room with 5 hallways numbered 0-4. " \
+#     "The walls of the hallways are depicted in black." \
+#     "Hallway 0 is at the top of the screen. Hallway 1 is directly underneath hallway 0, in the top middle." \
+#     "Hallway 2 is directly underneath hallway 1, in the middle. Hallway 3 is directly underneath hallway 2" \
+#     "in the bottom middle. Hallway 4 is direct underneath hallway 3 at the bottom of the image." \
+#     "This is a set of images from the scenario. Let's call the car on the right half of the screen the Ego Car." \
+#     "The Ego Car is currently heading towards a set of hallways, and could take any of them." \
+#     "You can use the Ego Car's position over time as evidence for estimating which hallway it's going to." \
+#     "Describe the Ego Car's position over time, which number is it heading towards?" \
+#     "Now, give approximate numerical probabilities for all numbers 0-4 as a bulleted list and explain each one."
+
+# prompt = "This is a metaphorical scenario of two toy cars navigating a room with 5 paths numbered 0-4. " \
+#     "This is a set of images from the scenario. Let's call the car on the right half of the screen the Ego Car." \
+#     "The Ego Car is currently heading towards a set of paths, and could take any of them." \
+#     "Give approximate numerical probabilities for each one."
 
 
 
@@ -484,16 +492,16 @@ class BulletHallwayEnv(gym.Env):
             human_position = np.array([6.5, 0])
             human_heading = np.pi + np.pi #np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
         else:
-            human_position = np.array([np.random.uniform(low=3.5, high=5.5), np.random.uniform(low=-2, high=2)])
-            human_heading = np.pi + np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
+            human_position = np.array([np.random.uniform(low=5.5, high=6.5), np.random.uniform(low=-2, high=2)])
+            human_heading = 0  #+ np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
         self.human_state = np.array([human_position[0], human_position[1], human_heading], dtype=np.float32)
 
         if self.debug:
             robot_position = np.array([-6.5, 0])
             robot_heading = np.pi # + np.random.uniform(low=-np.pi/4, high=np.pi/4)
         else:
-            robot_position = np.array([np.random.uniform(low=-5.5, high=-3.5), np.random.uniform(low=-2, high=2)])
-            robot_heading = np.pi + np.random.uniform(low=-np.pi/4, high=np.pi/4)
+            robot_position = np.array([np.random.uniform(low=-6.5, high=-5.5), np.random.uniform(low=-2, high=2)])
+            robot_heading = np.pi #+ np.random.uniform(low=-np.pi/4, high=np.pi/4)
         self.robot_state = np.array([robot_position[0], robot_position[1], robot_heading], dtype=np.float32)
 
         human_orientation = self.p.getQuaternionFromEuler([0, 0, human_heading])
@@ -733,16 +741,16 @@ class BulletHallwayEnv(gym.Env):
             stry = yoffset + ydelta*i
             str = f"{i}"
             cv2.putText(img, str, (strx, stry),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2, cv2.LINE_AA)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.75, (1, 0, 0), 2, cv2.LINE_AA)
 
         strx = -int(self.robot_state[0]*70) + 475
         stry = 330 #-int(self.robot_state[1]*70) + 270
         # img = img.astype(np.uint8).copy()
-        str = f"Ego Car"
-        cv2.putText(img, str, (strx, stry),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2, cv2.LINE_AA)
+        # str = f"Ego Car"
+        # cv2.putText(img, str, (strx, stry),
+        #             cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2, cv2.LINE_AA)
 
-        return img
+        return img #[:, img.shape[0]//2:]
 
 
 

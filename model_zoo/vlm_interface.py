@@ -63,7 +63,7 @@ def vlm(prompt,
        temperature=0,
        seed=1234,
        timeout_seconds=30,
-       max_attempts=5):
+       max_attempts=10):
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {openai_api_key}"
@@ -79,7 +79,7 @@ def vlm(prompt,
                     raise ValueError(f"Probability list had unexpected shape. Check message.")
             break
         except:
-            print('Timeout, retrying...')
+            print('Invalid response, retrying...')
             pass
     return response
 

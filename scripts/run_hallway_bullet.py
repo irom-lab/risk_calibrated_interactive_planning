@@ -35,13 +35,15 @@ if node == 'mae-majumdar-lab6' or node == "jlidard":
     render = True
     debug = True
     online = False
+    load_model = True
 elif node == 'mae-ani-lambda':
     home = expanduser("~")   # della fast IO file system
     num_cpu = 128
     max_steps = 200
     render = False
-    debug = True
+    debug = False
     online = True
+    load_model = False
 else:
     home = '/scratch/gpfs/jlidard/'  # della fast IO file system
     num_cpu = 128
@@ -49,6 +51,12 @@ else:
     render = False
     debug = False
     online = False
+    load_model = False
+
+if load_model:
+    load_path = '/home/jlidard/PredictiveRL/models/1702013145/model_best_450'
+else:
+    load_path = None
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -61,7 +69,10 @@ rgb_observation = False
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
     episodes = 1
-    learn_steps = 25000
+    if load_model:
+        learn_steps = 25000
+    else:
+        learn_steps = 200
     save_freq = 100000
     n_iters=100000
     video_length=max_steps
@@ -92,6 +103,8 @@ if __name__ == ("__main__"):
     model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir,
                 n_steps=max_steps, n_epochs=10, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs,
                 device=device)
+    if load_path is not None:
+        model = PPO.load(load_path, env=env)
     # model = SAC('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir, learning_rate=1e-4, gamma=0.999)
 
     callback = SaveOnBestTrainingRewardCallback(check_freq=save_freq, log_dir=logdir)
@@ -118,8 +131,8 @@ if __name__ == ("__main__"):
             if ep_mean_reward >= best_mean_reward:
                 model.save(os.path.join(models_dir, f"model_best_{iter}"))
 
-        if iter % 25 == 0:
-            record_video(videnv, model, video_length=video_length, num_videos=2)
+        if iter % 1 == 0:
+            record_video(videnv, model, video_length=video_length, num_videos=5)
 
 
         wandb.log(training_dict)
