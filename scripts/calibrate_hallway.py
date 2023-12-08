@@ -136,6 +136,10 @@ if __name__ == ("__main__"):
     # img.save('try.png')
     env.close()
     non_conformity_score = []
+    prediction_set_size = {}
+    lambdas = np.arange(0, 1, 0.1)
+    for lam in lambdas:
+        prediction_set_size[lam] = []
     image_path = f'/home/jlidard/PredictiveRL/language_img/'
     for index, row in dataset.iterrows():
         context = row[0]
@@ -145,15 +149,20 @@ if __name__ == ("__main__"):
             img = Image.fromarray(context[k], 'RGB')
             img.save(save_path)
         response = vlm(prompt=prompt, image_path=image_path) # response_str = response.json()["choices"][0]["message"]["content"]
-        probs = hallway_parse_response(response)
-        true_label_smx = probs[label]/100
+        probs = hallway_parse_response(response)/100
+        true_label_smx = probs[label]
         # extract probs
         non_conformity_score.append(1 - true_label_smx)
+        for lam in lambdas:
+            pred_set = probs > lam
+            risk = 1 if pred_set.sum() > 1 else 0
+            prediction_set_size[lam].append(sum(pred_set))
 
         if index % 25 == 0:
             print(f"Done {index} of {num_calibration}.")
 
     plot_figures(non_conformity_score)
+    plot_risk_figures(prediction_set_size)
 
 def hoeffding_bentkus(risk_values, alpha_val=0.9, n=100):
     sample_risk_mean = np.mean(risk_values)
@@ -167,6 +176,7 @@ def hoeffding_bentkus(risk_values, alpha_val=0.9, n=100):
     right_term = np.e * bin_cdf
 
     hb_p_val = np.min(left_term, right_term)
+    return hb_p_val
 
 def cross_entropy(a, b):
     return a * np.log(a/b) + (1-a) * np.log((1/a)/(1/b))

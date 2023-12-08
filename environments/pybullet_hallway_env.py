@@ -481,16 +481,16 @@ class BulletHallwayEnv(gym.Env):
 
         # Initial robot and human position
         if self.debug:
-            human_position = np.array([4, 0])
-            human_heading = np.pi + np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
+            human_position = np.array([6.5, 0])
+            human_heading = np.pi + np.pi #np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
         else:
             human_position = np.array([np.random.uniform(low=3.5, high=5.5), np.random.uniform(low=-2, high=2)])
             human_heading = np.pi + np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
         self.human_state = np.array([human_position[0], human_position[1], human_heading], dtype=np.float32)
 
         if self.debug:
-            robot_position = np.array([-4, 0])
-            robot_heading = np.pi + np.random.uniform(low=-np.pi/4, high=np.pi/4)
+            robot_position = np.array([-6.5, 0])
+            robot_heading = np.pi # + np.random.uniform(low=-np.pi/4, high=np.pi/4)
         else:
             robot_position = np.array([np.random.uniform(low=-5.5, high=-3.5), np.random.uniform(low=-2, high=2)])
             robot_heading = np.pi + np.random.uniform(low=-np.pi/4, high=np.pi/4)
