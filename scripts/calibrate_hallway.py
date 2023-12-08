@@ -10,26 +10,32 @@ from PIL import Image
 from environments.hallway_env import HumanIntent
 import matplotlib.pyplot as plt
 from environments.hallway_env import HallwayEnv, prompt
+from environments.pybullet_hallway_env import BulletHallwayEnv, prompt
 from os.path import expanduser
 import wandb
 from wandb_osh.hooks import TriggerWandbSyncHook
 from model_zoo.vlm_interface import vlm, hallway_parse_response
+from scipy.stats import binom
 
 trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
 home = expanduser("~")
 
-model_num = 1701988934  # Best kinematic
-model_num = 1700717235  # Best RGB
+use_bullet = True
+if not use_bullet:
+    model_num = 1700717235  # Best RGB
+    model_num = 1701999480  # Best kinematic
+else:
+    model_num = 1701988944 # 300 from 3d hallway
 
-loaddir = os.path.join(home, f"PredictiveRL/logs/{model_num}/best_model.zip")
+loaddir = os.path.join(home, f"PredictiveRL/models/{model_num}/epoch_600.zip")
 logdir = os.path.join(home, f"PredictiveRL/conformal_outputs/{int(time.time())}/")
 dataframe_path = os.path.join(home, f"PredictiveRL/conformal_outputs/{int(time.time())}.csv")
 
 
-def plot_figures(non_conformity_score):
+def plot_figures(non_conformity_score, is_bullet=False):
     epsilon = 0.15
-    num_calibration = 100  # fake!
+    num_calibration = 500  # fake!
     q_level = np.ceil((num_calibration + 1) * (1 - epsilon)) / num_calibration
     qhat = np.quantile(non_conformity_score, q_level, method='higher')
     print('Quantile value qhat:', qhat)
@@ -46,7 +52,11 @@ def plot_figures(non_conformity_score):
     )
     plt.xlabel('Non-comformity score')
     plt.legend()
-    plt.savefig('2d_hallway_non_conformity.png')
+    if is_bullet:
+        name = 'hallway_non_conformity.png'
+    else:
+        name = 'bullet_hallway_non_conformity.png'
+    plt.savefig(name)
     print('')
     print('A good predictor should have low non-comformity scores, concentrated at the left side of the figure')
 
@@ -54,7 +64,7 @@ def plot_figures(non_conformity_score):
 
 render = False
 debug = False
-rgb_observation = True
+rgb_observation = False
 online = False
 # 'if __name__' Necessary for multithreading
 if __name__ == ("__main__"):
@@ -69,7 +79,10 @@ if __name__ == ("__main__"):
     timesteps = max_steps
 
     # Create the vectorized environment
-    env = HallwayEnv(render=render, debug=debug, time_limit=max_steps, rgb_observation=rgb_observation)
+    if use_bullet:
+        env = BulletHallwayEnv(render=render, debug=debug, time_limit=max_steps, rgb_observation=rgb_observation,show_intent=False)
+    else:
+        env = HallwayEnv(render=render, debug=debug, time_limit=max_steps, rgb_observation=rgb_observation ,show_intent=False)
 
     # if online:
     #     wandb.init(
@@ -83,20 +96,21 @@ if __name__ == ("__main__"):
 
     print('Training Policy.')
     policy_kwargs = dict(net_arch=dict(pi=[64, 64], vf=[64, 64]))
-    model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir,
-                n_steps=max_steps, n_epochs=2, learning_rate=1e-6, gamma=0.999, policy_kwargs=policy_kwargs)
-    model.load(loaddir)
+    # model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir,
+    #             n_steps=max_steps, n_epochs=2, learning_rate=1e-6, gamma=0.999, )
+    model = PPO.load(loaddir, env=env)
 
 
     num_calibration = 5
-    observation_list = []
+    context_list = []
     label_list = []
     for _ in range(num_calibration):
         obs, _ = env.reset()
         intent = np.random.choice(5)
         env.seed_intent(HumanIntent(intent))
         total_reward = 0
-        episode_length_actual = np.random.randint(low=video_length/10, high=video_length/5)
+        episode_length_actual = video_length//5 #np.random.randint(low=video_length/10, high=video_length/5)
+        observation_list = []
         # rollout to a random timepoint
         for i in range(episode_length_actual):
             action, _states = model.predict(obs, deterministic=True)
@@ -104,24 +118,32 @@ if __name__ == ("__main__"):
             total_reward += rewards
             if done:
                 continue
-        print(f"Total reward: {total_reward}")
-        img_obs = env.render(resolution_scale=2)
-        observation = img_obs
-        observation_list.append(observation)
+            if i % 10 == 0:
+                print(f"Total reward: {total_reward}")
+                if use_bullet:
+                    img_obs = env.render()
+                else:
+                    img_obs = env.render(resolution_scale=2)
+                observation = img_obs
+                observation_list.append(observation)
+        context = np.stack(observation_list, 0)
+        context_list.append(context)
         label_list.append(intent)  #TODO(justin.lidard): add dynamic intents
-    dataset = pd.DataFrame({"context": observation_list, "label": label_list})
+    dataset = pd.DataFrame({"context": context_list, "label": label_list})
     dataset.to_csv(dataframe_path)
 
     # img = Image.fromarray(observation["obs"], 'RGB')
     # img.save('try.png')
-
+    env.close()
     non_conformity_score = []
-    image_path = '/home/jlidard/PredictiveRL/hallway_tmp.png'
+    image_path = f'/home/jlidard/PredictiveRL/language_img/'
     for index, row in dataset.iterrows():
         context = row[0]
         label = row[1]
-        img = Image.fromarray(context, 'RGB')
-        img.save(image_path)
+        for k in range(context.shape[0]):
+            save_path = f'/home/jlidard/PredictiveRL/language_img/hallway_tmp{k}.png'
+            img = Image.fromarray(context[k], 'RGB')
+            img.save(save_path)
         response = vlm(prompt=prompt, image_path=image_path) # response_str = response.json()["choices"][0]["message"]["content"]
         probs = hallway_parse_response(response)
         true_label_smx = probs[label]/100
@@ -133,8 +155,21 @@ if __name__ == ("__main__"):
 
     plot_figures(non_conformity_score)
 
-def hoeffding_bentkus(risk_values):
-    pass
+def hoeffding_bentkus(risk_values, alpha_val=0.9, n=100):
+    sample_risk_mean = np.mean(risk_values)
+
+    max_alpha = np.max(sample_risk_mean, alpha_val)
+    ce = cross_entropy(max_alpha, alpha_val)
+    left_term = np.exp(-n * ce)
+
+    x = np.ceil(n * sample_risk_mean)
+    bin_cdf = binom.cdf(x, n, alpha_val)
+    right_term = np.e * bin_cdf
+
+    hb_p_val = np.min(left_term, right_term)
+
+def cross_entropy(a, b):
+    return a * np.log(a/b) + (1-a) * np.log((1/a)/(1/b))
 
 
 

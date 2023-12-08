@@ -116,7 +116,7 @@ def state_to_tripoints(pos, tripoints_bf):
 class HallwayEnv(gym.Env):
 
     def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=5, deterministic_intent=None,
-                 debug=False, render_mode="rgb_array", time_limit=100, rgb_observation=False):
+                 debug=False, render_mode="rgb_array", time_limit=100, rgb_observation=False, show_intent=True):
         super(HallwayEnv, self).__init__()
         # Define action and observation space
         # They must be gym.spaces objects
@@ -130,6 +130,7 @@ class HallwayEnv(gym.Env):
         self.state_dim = state_dim
         self.full_obs_dim = self.state_dim + self.obs_seq_len*self.state_dim
         self.rgb_observation = rgb_observation
+        self.show_intent = show_intent
         if self.rgb_observation:
             self.observation_space = {"obs": spaces.Box(low=0, high=255, shape=(256, 256, 3), dtype=np.uint8),
                                       "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)}
@@ -508,10 +509,12 @@ class HallwayEnv(gym.Env):
         intent_rect = np.zeros(sub_img.shape, dtype=np.uint8)
         intent_rect[:, :, -1] = 255
 
+
         res = cv2.addWeighted(sub_img, 0.5, intent_rect, 0.5, 1.0)
 
-        # # Putting the image back to its position
-        self.img[y:y + h, x:x + w] = res
+        if self.show_intent:
+            # # Putting the image back to its position
+            self.img[y:y + h, x:x + w] = res
 
         # Display human and robot
         cv2.fillPoly(self.img, [human_tripoints.reshape(-1, 1, 2).astype(np.int32)], color=(0, 0, 255))
@@ -541,8 +544,9 @@ class HallwayEnv(gym.Env):
             # Display the policy and intent
             mode = self.intent
             str = f"Human intent: hallway {mode}"
-            cv2.putText(img, str, (1300 * resolution_scale, 25 * resolution_scale),
-                        self.font, 0.75 * resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
+            if self.show_intent:
+                cv2.putText(img, str, (1300 * resolution_scale, 25 * resolution_scale),
+                            self.font, 0.75 * resolution_scale, (0, 0, 0), 2, cv2.LINE_AA)
 
             str = f"Cumulative reward: {self.cumulative_reward}"
             cv2.putText(img, str, (1300 * resolution_scale, 50 * resolution_scale),

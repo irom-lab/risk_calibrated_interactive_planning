@@ -22,24 +22,30 @@ openai.api_key = openai_api_key
 
 
 def make_payload(prompt, max_tokens, seed, image_path):
-    base64_image = encode_image(image_path)
+    image_paths = sorted(os.listdir(image_path))
+    image_paths = [os.path.join(image_path, p) for p in image_paths]
+    base64_images = [encode_image(path) for path in image_paths]
+    content_message = {"type": "text", "text": prompt}
+
+    def image_prompt(base64_image):
+        ret = {
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:image/jpeg;base64,{base64_image}"
+            }
+        }
+        return ret
+
+    content = [content_message]
+    for i in base64_images:
+        content.append(image_prompt(i))
+
     payload = {
         "model": "gpt-4-vision-preview",
         "messages": [
             {
                 "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": prompt
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{base64_image}"
-                        }
-                    }
-                ]
+                "content": content
             }
         ],
         "max_tokens": max_tokens,

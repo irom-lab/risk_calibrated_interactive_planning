@@ -27,6 +27,41 @@ RENDER_WIDTH = 960
 WALL_XLEN = 2
 WALL_YLEN = 1
 
+# prompt = "This is a simulation of two robots navigating a room with 5 hallways numbered 0-4. " \
+#     "The human's robot on the right side of the image. The robot on the left is controlled autonomously." \
+#     "Based on what you can see about the human's robot, what can you infer about which hallway it will travel towards?" \
+#     "What hallway is the human's robot closest to?" "What hallway is the human's robot pointing towards?" \
+#     "Based on the human's current position and heading, which" \
+#     "hallway(s) is the human likely to enter? Give approximate numeric probabilities for all hallways 0-4," \
+#     " in order starting with 0. Hallway 0 is at the top."
+
+# prompt = "This is a picture of two toy cars navigating a room with 5 hallways numbered 0-4. " \
+#     "The cars always go forward and can turn left and right. They want to get to the other side." \
+#     "Based on the right car's current position and heading, which" \
+#     "hallways are the right car likely to enter? Give approximate numeric probabilities for all hallways 0-4," \
+#     " in order starting with 0. Hallway 0 is at the top."
+
+# prompt = "This is a metaphorical scenario of two toy cars navigating a room with 5 hallways numbered 0-4. " \
+#     "This is a set of images from the scenario. Focus on the part of the images labeled Ego car." \
+#     "The Ego car is current heading towards a set of hallways, and could take any of them." \
+#     "Based on the Ego car's trajectory, which of the hallways is it going towards?" \
+#     "Give approximate numerical probabilities for all hallways 0-4 as a bulleted list and explain each one." \
+#     "Never give higher than 60% and lower than 10% since it's always best to be a little skeptical." \
+#     "Always give adjacent hallways to your most-likely prediction a near-equal weight"
+
+prompt = "This is a metaphorical scenario of two toy cars navigating a room with 5 hallways numbered 0-4. " \
+    "This is a set of images from the scenario. Focus on the part of the images labeled Ego car." \
+    "The Ego car is current heading towards a set of hallways, and could take any of them." \
+    "Describe the Ego car's motion: is it turning towards the label 0, 1, 2, 3, or 4?" \
+    "Now, give approximate numerical probabilities for all hallways 0-4 as a bulleted list and explain each one." \
+    "Never give higher than 90% and lower than 5% since it's always best to be a little skeptical." \
+    "Always give adjacent hallways to your most-likely prediction a near-equal weight"
+
+
+
+
+
+
 class HumanIntent(IntEnum):
     HALLWAY1 = 0
     HALLWAY2 = 1
@@ -109,13 +144,13 @@ class BulletHallwayEnv(gym.Env):
 
     def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=1, deterministic_intent=None,
                  debug=False, render_mode="rgb_array", time_limit=100, rgb_observation=False,
-                 urdfRoot=pybullet_data.getDataPath()):
+                 urdfRoot=pybullet_data.getDataPath(), show_intent=True):
         super(BulletHallwayEnv, self).__init__()
-
+        self.show_intent = show_intent
         self.urdfRoot = urdfRoot
         self.cam_dist = 10
-        self.cam_yaw = -60
-        self.cam_pitch = -45
+        self.cam_yaw = 0 #-60
+        self.cam_pitch = -90
         self.cam_targ = [0, 0, 0]
 
         if render:
@@ -210,8 +245,12 @@ class BulletHallwayEnv(gym.Env):
         self.intent_asset = None
         for asset in self.wall_assets:
             self.p.changeVisualShape(asset, -1, rgbaColor=[0, 0, 0, 1])
-        self.p.changeVisualShape(goal1, -1, rgbaColor=[0, 0, 1, 1])
-        self.p.changeVisualShape(goal2, -1, rgbaColor=[1, 0, 0, 1])
+        if self.show_intent:
+            goal_alpha = 1
+        else:
+            goal_alpha = 0
+        self.p.changeVisualShape(goal1, -1, rgbaColor=[0, 0, 1, goal_alpha])
+        self.p.changeVisualShape(goal2, -1, rgbaColor=[1, 0, 0, goal_alpha])
 
 
         # Boundaries
@@ -327,17 +366,11 @@ class BulletHallwayEnv(gym.Env):
         human_intent_mismatch_penalty = 0
         self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
         self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
-        human_reach_bonus = 1 if self.dist_human == 0 else 0
-        robot_reach_bonus = 0.1 if self.dist_robot == 0 else 0
+        human_reach_bonus = 0 if self.dist_human == 0 else 0
+        robot_reach_bonus = 0 if self.dist_robot == 0 else 0
         reach_bonus = human_reach_bonus + robot_reach_bonus
         self.robot_distance = np.linalg.norm(self.robot_state[:2] - self.robot_goal_rect[:2])
         self.human_distance = np.linalg.norm(self.human_state[:2] - self.human_goal_rect[:2])
-        if self.learning_agent == LearningAgent.HUMAN:
-            self.reward = self.prev_dist_human - self.dist_human
-            self.reward = np.sign(self.reward)
-        else:
-            self.reward = self.prev_dist_robot - self.dist_robot
-            self.reward = np.sign(self.reward)
         self.reward = self.prev_dist_human - self.dist_human + self.prev_dist_robot - self.dist_robot
         # if self.reward <= 0:
         #     self.stuck_counter += 1
@@ -347,7 +380,7 @@ class BulletHallwayEnv(gym.Env):
         #     self.done=True
         self.reward = self.reward
         #print(self.reward)
-        self.reward += - collision_penalty + reach_bonus + intent_bonus*2
+        self.reward += - collision_penalty + reach_bonus + intent_bonus
         self.prev_reward = self.reward
         self.prev_dist_robot = self.dist_robot
         self.prev_dist_human = self.dist_human
@@ -481,11 +514,12 @@ class BulletHallwayEnv(gym.Env):
             self.robot = racecar.Racecar(self.p, urdfRootPath=self.urdfRoot, timeStep=self.timesteps,
                                          pos=(robot_position[0],robot_position[1],0.2),
                                          orientation=robot_orientation)
-            intent = self.p.loadURDF(self.wallpath, [wall_left + WALL_XLEN / 2, wall_up - WALL_YLEN / 2, -0.4999],
-                                     [0, 0, 0, 1],
-                                     useFixedBase=True)
-            self.p.changeVisualShape(intent, -1, rgbaColor=[1, 0, 0, 0.5])
-            self.intent_asset = intent
+            if self.show_intent:
+                intent = self.p.loadURDF(self.wallpath, [wall_left + WALL_XLEN / 2, wall_up - WALL_YLEN / 2, -0.4999],
+                                         [0, 0, 0, 1],
+                                         useFixedBase=True)
+                self.p.changeVisualShape(intent, -1, rgbaColor=[1, 0, 0, 0.5])
+                self.intent_asset = intent
 
             collisionFilterGroup = 0
             collisionFilterMask = 0
@@ -503,7 +537,8 @@ class BulletHallwayEnv(gym.Env):
         else:
             self.p.resetBasePositionAndOrientation(self.human.racecarUniqueId,(human_position[0],human_position[1],0.2),human_orientation)
             self.p.resetBasePositionAndOrientation(self.robot.racecarUniqueId,(robot_position[0],robot_position[1],0.2),robot_orientation)
-            self.p.resetBasePositionAndOrientation(self.intent_asset, [wall_left + WALL_XLEN / 2, wall_up - WALL_YLEN / 2, -0.4999], [0, 0, 0, 1])
+            if self.show_intent:
+                self.p.resetBasePositionAndOrientation(self.intent_asset, [wall_left + WALL_XLEN / 2, wall_up - WALL_YLEN / 2, -0.4999], [0, 0, 0, 1])
 
 
         self.human.applyAction([0, 0])
@@ -588,9 +623,10 @@ class BulletHallwayEnv(gym.Env):
         wall_down = wall_up - WALL_YLEN
         rect = (wall_left, wall_up, WALL_XLEN, WALL_YLEN)
 
-        self.p.resetBasePositionAndOrientation(self.intent_asset,
-                                               [wall_left + WALL_XLEN / 2, wall_up - WALL_YLEN / 2, -0.4999],
-                                               [0, 0, 0, 1])
+        if self.show_intent:
+            self.p.resetBasePositionAndOrientation(self.intent_asset,
+                                                   [wall_left + WALL_XLEN / 2, wall_up - WALL_YLEN / 2, -0.4999],
+                                                   [0, 0, 0, 1])
 
     def dynamics(self, state, other_state, control, is_human=False):
         return self.dubins_car(state, other_state, control, is_human=is_human)
@@ -688,5 +724,25 @@ class BulletHallwayEnv(gym.Env):
         rgb_array = np.reshape(rgb_array, (h, w, 4))
         #rgb_array = np.transpose(rgb_array, (2, 0, 1))
         rgb_array = rgb_array[:, :, :3]
-        return rgb_array
-        
+        img = rgb_array.astype(np.uint8).copy()
+
+        strx = 475
+        yoffset = 112
+        ydelta = 130
+        for i in range(5):
+            stry = yoffset + ydelta*i
+            str = f"{i}"
+            cv2.putText(img, str, (strx, stry),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2, cv2.LINE_AA)
+
+        strx = -int(self.robot_state[0]*70) + 475
+        stry = 330 #-int(self.robot_state[1]*70) + 270
+        # img = img.astype(np.uint8).copy()
+        str = f"Ego Car"
+        cv2.putText(img, str, (strx, stry),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2, cv2.LINE_AA)
+
+        return img
+
+
+
