@@ -131,8 +131,8 @@ if __name__ == ("__main__"):
             if ep_mean_reward >= best_mean_reward:
                 model.save(os.path.join(models_dir, f"model_best_{iter}"))
 
-        if iter % 1 == 0:
-            record_video(videnv, model, video_length=video_length, num_videos=5)
+        if iter % 100 == 0:
+            record_video(videnv, model, video_length=video_length, num_videos=2)
 
 
         wandb.log(training_dict)
