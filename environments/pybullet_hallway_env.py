@@ -299,9 +299,9 @@ class BulletHallwayEnv(gym.Env):
         intent_bonus = 0
         human_hallway_dist, human_hallway, wrong_hallway = self.compute_dist_to_hallways(is_human=True)
         robot_best_hallway_dist, robot_hallway, i_best = self.compute_dist_to_hallways(is_human=False)
-        if self.human_state[0] > self.walls[0][0]:
+        if self.human_state[0] >= 0:
             intent_bonus += (self.prev_human_hallway_dist - human_hallway_dist).item()
-        if self.robot_state[0] < self.walls[0][0] + WALL_XLEN:
+        if self.robot_state[0] <= 0:
             intent_bonus += (self.prev_robot_hallway_dist - robot_best_hallway_dist).item()
         self.prev_robot_hallway_dist = robot_best_hallway_dist
         self.prev_human_hallway_dist = human_hallway_dist
