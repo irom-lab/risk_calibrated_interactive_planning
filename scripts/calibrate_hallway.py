@@ -52,13 +52,34 @@ def plot_figures(non_conformity_score, is_bullet=False):
     )
     plt.xlabel('Non-comformity score')
     plt.legend()
-    if is_bullet:
+    if not is_bullet:
         name = 'hallway_non_conformity.png'
     else:
         name = 'bullet_hallway_non_conformity.png'
     plt.savefig(name)
     print('')
     print('A good predictor should have low non-comformity scores, concentrated at the left side of the figure')
+
+def plot_risk_figures(prediction_set_size, is_bullet=False):
+
+    # plot histogram and quantile
+    x_list = list(prediction_set_size.keys())
+    y_list = [np.mean(v) for v in prediction_set_size.values()]
+    plt.figure(figsize=(6, 2))
+    plt.scatter(x_list, y_list, edgecolor='k', linewidth=1)
+    plt.title(
+        'Prediction Set Size versus Detection Level'
+    )
+    plt.xlabel('Detection Level')
+    plt.legend()
+    if not is_bullet:
+        name = 'hallway_set_size.png'
+    else:
+        name = 'bullet_hallway_set_size.png'
+    plt.savefig(name)
+
+# test_dict = {0: [0, 1, 2], 0.1: [1, 1, 2, 3, 5], 0.2: [1, 5, 7, 9, 11], 0.5: [0, 11], 0.10: [66]}
+# plot_risk_figures(test_dict, is_bullet=True)
 
 
 
@@ -162,8 +183,9 @@ if __name__ == ("__main__"):
         if index % 25 == 0:
             print(f"Done {index} of {num_calibration}.")
 
-    plot_figures(non_conformity_score)
-    plot_risk_figures(prediction_set_size)
+    plot_risk_figures(prediction_set_size, is_bullet=True)
+    plot_figures(non_conformity_score, is_bullet=True)
+
 
 def hoeffding_bentkus(risk_values, alpha_val=0.9, n=100):
     sample_risk_mean = np.mean(risk_values)

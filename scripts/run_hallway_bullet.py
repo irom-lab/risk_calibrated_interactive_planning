@@ -70,7 +70,7 @@ rgb_observation = False
 if __name__ == ("__main__"):
     episodes = 1
     if load_model:
-        learn_steps = 200
+        learn_steps = 25000
     else:
         learn_steps = 25000
     save_freq = 100000

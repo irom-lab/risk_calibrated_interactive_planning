@@ -215,8 +215,9 @@ class BulletHallwayEnv(gym.Env):
         self.time_limit = time_limit
         self.learning_agent = LearningAgent.HUMAN
         self.cumulative_reward = 0
-        self.prev_corridor_dist = 0
         self.stuck_counter = 0
+        self.prev_human_hallway_dist = 0
+        self.prev_robot_hallway_dist = 0
 
         # Load assets
         self.p.setGravity(0, 0, -9.8)
@@ -303,22 +304,40 @@ class BulletHallwayEnv(gym.Env):
 
         self.timesteps += 1
 
-        wall_dist = wall_set_distance(self.walls, self.robot_state)
-        human_wall_dist = wall_set_distance(self.walls, self.human_state)
-
         if self.display_render:
             self.render()
 
-        # controls = np.array([-self.max_turning_rate, 0, self.max_turning_rate])
-        # actions = [controls[a] for a in action]
-        actions = action
+        self.compute_state_transition(action)
+
+        # Compute a bonus/penalty for the agents going to the optimal/suboptimal hallway
+        intent_bonus = 0
+        human_hallway_dist, human_hallway, wrong_hallway = self.compute_dist_to_hallways(is_human=True)
+        robot_best_hallway_dist, robot_hallway, i_best = self.compute_dist_to_hallways(is_human=False)
+        if self.human_state[0] > self.walls[0][0]:
+            intent_bonus = self.prev_robot_hallway_dist - robot_best_hallway_dist + \
+                           (self.prev_human_hallway_dist - human_hallway_dist)
+            intent_bonus = intent_bonus.item()
+        self.prev_robot_hallway_dist = robot_best_hallway_dist
+        self.prev_human_hallway_dist = human_hallway_dist
+
+        # Compute reward
+        self.compute_reward(wrong_hallway, intent_bonus)
+        self.prev_dist_robot = self.dist_robot
+        self.prev_dist_human = self.dist_human
+
+        info = {}
+        truncated = False
+        observation = self.compute_observation(human_hallway)
+
+        if self.display_render:
+            if self.tid is not None:
+                self.p.removeUserDebugItem(self.tid)
+            self.tid = self.p.addUserDebugText(f"Reward: {self.cumulative_reward}", [0, 0, 2], textSize=5, textColorRGB=[0, 0, 0])
+
+        return observation, self.reward, self.done, truncated, info
+
+    def compute_state_transition(self, action):
         action_scale = 1
-        # accel_neg_clip_val = 2.0
-        # if action[2] > accel_neg_clip_val:
-        #     action[2] = accel_neg_clip_val
-        # if action[3] > accel_neg_clip_val:
-        #     action[3] = accel_neg_clip_val
-        # targetvel = -1.5
         action_offset = -2
         agent_0_vel = action_offset  #+action[2]
         agent_1_vel = action_offset  #+action[3]
@@ -333,35 +352,51 @@ class BulletHallwayEnv(gym.Env):
         self.human_state = self.get_state(self.human.racecarUniqueId)
         self.robot_state = self.get_state(self.robot.racecarUniqueId)
 
-        truncated = False
-        collision_penalty = 0
-        wall_coord = self.walls[self.intent]
-        wall_left = wall_coord[0]
-        wall_right = WALL_XLEN
-        wall_up = wall_coord[1] + WALL_YLEN
-        wall_down = wall_up - WALL_YLEN
-        rect = (wall_left, wall_up, WALL_XLEN, WALL_YLEN)
-        wrong_hallway = self.intent_violation(self.human_state, rect)
+    def compute_dist_to_hallways(self, is_human=True):
+
+        if is_human:
+            wall_coord = self.walls[self.intent]
+            wall_left = wall_coord[0]
+            wall_up = wall_coord[1] + WALL_YLEN
+            rect = (wall_left, wall_up, WALL_XLEN, WALL_YLEN)
+            wrong_hallway = self.intent_violation(self.human_state, rect)
+            human_intent_hallway_dist = wall_set_distance([rect[:2]], self.human_state)[0]
+            return human_intent_hallway_dist, rect, wrong_hallway
+        else:
+            robot_closest_wall_dist = np.inf
+            i_best = -1
+            best_rect = None
+            for i, other_wall in enumerate(self.walls):
+                if i == self.intent:
+                    continue
+                wall_left = other_wall[0]
+                wall_right = WALL_XLEN
+                wall_up = other_wall[1] + WALL_YLEN
+                other_rect = (wall_left, wall_up, WALL_XLEN, WALL_YLEN)
+                robot_intent_hallway_dist = wall_set_distance(([other_rect[:2]]), self.robot_state)
+                if robot_intent_hallway_dist < robot_closest_wall_dist:
+                    robot_closest_wall_dist = robot_intent_hallway_dist
+                    i_best = i
+                    best_rect = other_rect
+            return robot_closest_wall_dist, best_rect, i_best
+        
+    def compute_reward(self, wrong_hallway, intent_bonus):
+
+        wall_dist = wall_set_distance(self.walls, self.robot_state)
+        human_wall_dist = wall_set_distance(self.walls, self.human_state)
 
         violated_dist = any(wall_dist <= 0.25) or any(human_wall_dist <= 0.25)
+        collision_penalty = 0
         if violated_dist:
             self.done = False
-            collision_penalty = 0.001
-
-        intent_bonus = 0
-        intent_corridor_dist = wall_set_distance([rect[:2]], self.human_state)[0]
-        if self.human_state[0] > wall_right:
-            intent_bonus = self.prev_corridor_dist - intent_corridor_dist
-        self.prev_corridor_dist = intent_corridor_dist
-        # print(intent_bonus)
+            collision_penalty += 0.001
 
         if collision_with_human(self.robot_state, self.human_state):
             self.done = True
-            #collision_penalty = 1
 
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1:
             self.done = False
-            collision_penalty = 0.000
+            collision_penalty += 0.000
 
         if wrong_hallway:
             self.done = True
@@ -369,36 +404,22 @@ class BulletHallwayEnv(gym.Env):
         if self.timesteps >= self.time_limit:
             self.done = True
             truncated = True
-
-        # Compute reward
-        human_intent_mismatch_penalty = 0
+        
         self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
         self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
-        human_reach_bonus = 0 if self.dist_human == 0 else 0
-        robot_reach_bonus = 0 if self.dist_robot == 0 else 0
+        human_reach_bonus = 0.1 if self.dist_human == 0 else 0
+        robot_reach_bonus = 0.1 if self.dist_robot == 0 else 0
         reach_bonus = human_reach_bonus + robot_reach_bonus
         self.robot_distance = np.linalg.norm(self.robot_state[:2] - self.robot_goal_rect[:2])
         self.human_distance = np.linalg.norm(self.human_state[:2] - self.human_goal_rect[:2])
         self.reward = self.prev_dist_human - self.dist_human + self.prev_dist_robot - self.dist_robot
-        # if self.reward <= 0:
-        #     self.stuck_counter += 1
-        # else:
-        #     self.stuck_counter = 0
-        # if self.stuck_counter >= 25:
-        #     self.done=True
-        self.reward = self.reward
-        #print(self.reward)
-        self.reward += - collision_penalty + reach_bonus + intent_bonus
-        self.prev_reward = self.reward
-        self.prev_dist_robot = self.dist_robot
-        self.prev_dist_human = self.dist_human
+        self.reward += - collision_penalty + reach_bonus + intent_bonus \
 
+        # Update running totals
+        self.prev_reward = self.reward
         self.cumulative_reward += self.reward
 
-        info = {}
-
-        human_delta_x = self.robot_state[0] - self.human_state[0]
-        human_delta_y = self.robot_state[1] - self.human_state[1]
+    def compute_observation(self, hallway):
 
         if self.rgb_observation:
             self.get_image(resolution_scale=1)
@@ -413,43 +434,13 @@ class BulletHallwayEnv(gym.Env):
             self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
             observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing]),
                                          human_wall_dist, robot_wall_dist,
-                                         wall_set_distance([rect], self.human_state),
-                                         wall_set_distance([rect], self.robot_state),
+                                         wall_set_distance([hallway], self.human_state),
+                                         wall_set_distance([hallway], self.robot_state),
                                          self.robot_state[-1:], self.human_state[-1:],
                                          np.array([self.dist_robot, self.dist_human])))
-        #observation = np.concatenate((self.robot_state, self.human_state))
         observation = {"obs": observation, "mode": np.eye(5)[self.intent]}
+        return observation
 
-        # print(self.walls)
-        # print(self.intent)
-        # print(self.human_state)
-        # print(self.human_goal_rect)
-        # print(self.robot_state)
-        # print(self.robot_goal_rect)
-        # print(human_wall_dist)
-        # print(rect)
-        #
-        # for test_point in np.array([-4, -2, 0, 2, 4]):
-        #     for intent in range(5):
-        #         wall_coord = self.walls[intent]
-        #         wall_left = wall_coord[0]
-        #         wall_right = WALL_XLEN
-        #         wall_up = wall_coord[1] + WALL_YLEN
-        #         wall_down = wall_up - WALL_YLEN
-        #         rect = (wall_left, wall_up, WALL_XLEN, WALL_YLEN)
-        #         wrong_hallway = self.intent_violation(np.array([0, test_point, 0]), rect)
-        #         print(wrong_hallway)
-        #     print()
-
-
-        #cv2.imwrite('test.png', observation)
-
-        if self.display_render:
-            if self.tid is not None:
-                self.p.removeUserDebugItem(self.tid)
-            self.tid = self.p.addUserDebugText(f"Reward: {self.cumulative_reward}", [0, 0, 2], textSize=5, textColorRGB=[0, 0, 0])
-
-        return observation, self.reward, self.done, truncated, info
 
     def reset(self, seed=1234, options={}):
 
@@ -558,10 +549,8 @@ class BulletHallwayEnv(gym.Env):
         self.robot_state = self.get_state(self.robot.racecarUniqueId)
 
 
-        self.score = 0
-        self.prev_button_direction = 1
-        self.button_direction = 1
-
+        self.reward = 0
+        self.cumulative_reward = 0
 
         self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
         self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
@@ -570,45 +559,12 @@ class BulletHallwayEnv(gym.Env):
 
         self.done = False
 
-        _, disp = distance_to_goal(self.human_state, self.human_goal_rect)
+        human_hallway_dist, human_hallway, wrong_hallway = self.compute_dist_to_hallways(is_human=True)
+        robot_best_hallway_dist, robot_hallway, i_best = self.compute_dist_to_hallways(is_human=False)
+        self.prev_robot_hallway_dist = robot_best_hallway_dist
+        self.prev_human_hallway_dist = human_hallway_dist
 
-        self.prev_states= []  # short state history to incorporate some memory in the policy
-        for i in range(self.obs_seq_len):
-            self.prev_states.append([0] * self.state_dim)  # to create history
-
-        intent_corridor_dist = wall_set_distance([rect[:2]], self.human_state)[0]
-        self.prev_corridor_dist = intent_corridor_dist
-        self.reward = - np.linalg.norm(self.robot_state[:2] - self.robot_goal_rect[:2]) - np.linalg.norm(self.human_state[:2] - self.human_goal_rect[:2])
-        self.prev_reward = self.reward
-        self.cumulative_reward = 0
-
-        if self.rgb_observation:
-            self.get_image(resolution_scale=1)
-            observation = cv2.resize(self.img, (256, 256))
-        else:
-            human_delta = self.robot_state - self.human_state
-            human_delta_pos = np.linalg.norm(human_delta[:2])
-            human_delta_bearing = np.arctan2(human_delta[0], human_delta[1])
-            human_wall_dist = wall_set_distance(self.walls, self.human_state)
-            robot_wall_dist = wall_set_distance(self.walls, self.robot_state)
-            self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
-            self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
-            observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing]),
-                                         human_wall_dist, robot_wall_dist,
-                                         wall_set_distance([rect], self.human_state),
-                                         wall_set_distance([rect], self.robot_state),
-                                         self.robot_state[-1:], self.human_state[-1:],
-                                         np.array([self.dist_robot, self.dist_human])))
-        #print(observation.shape)
-        # observation = np.concatenate((self.robot_state, self.human_state))
-        observation = {"obs": observation, "mode": np.eye(5)[self.intent]}
-
-        # from PIL import Image
-        # img = Image.fromarray(observation["obs"], 'RGB')
-        # img.save('try.png')
-        # import time
-        # print("something")
-        # time.sleep(10)
+        observation = self.compute_observation(human_hallway)
 
         return observation, {}
 
