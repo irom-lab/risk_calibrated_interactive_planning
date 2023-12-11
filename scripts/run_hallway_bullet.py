@@ -33,7 +33,7 @@ if node == 'mae-majumdar-lab6' or node == "jlidard":
     num_cpu = 1
     max_steps = 300
     render = True
-    debug = True
+    debug = False
     online = False
     load_model = True
 elif node == 'mae-ani-lambda':

@@ -229,6 +229,7 @@ class BulletHallwayEnv(gym.Env):
         self.stuck_counter = 0
         self.prev_human_hallway_dist = 0
         self.prev_robot_hallway_dist = 0
+        self.robot_best_hallway_initial = None
 
         # Load assets
         self.p.setGravity(0, 0, -9.8)
@@ -282,7 +283,7 @@ class BulletHallwayEnv(gym.Env):
         leftb = self.p.loadURDF(boundaryshortpath,[LEFT_BOUNDARY, 0, 0], rplane_orientation, useFixedBase=True)
         rightb = self.p.loadURDF(boundaryshortpath,[RIGHT_BOUNDARY,0, 0], leftplane_orientation, useFixedBase=True)
         self.boundary_assets = [ub, lb, leftb, rightb]
-        self.tid = None
+        self.tid = []
         self.rollout_counter = 0
         self.reset_state_history()
 
@@ -298,7 +299,7 @@ class BulletHallwayEnv(gym.Env):
         # Compute a bonus/penalty for the agents going to the optimal/suboptimal hallway
         intent_bonus = 0
         human_hallway_dist, human_hallway, wrong_hallway = self.compute_dist_to_hallways(is_human=True)
-        robot_best_hallway_dist, robot_hallway, wrong_hallway_robot = self.compute_dist_to_hallways(is_human=False)
+        robot_best_hallway_dist, robot_hallway, i_best_robot = self.compute_dist_to_hallways(is_human=False)
         if self.human_state[0] >= 0:
             intent_bonus += (self.prev_human_hallway_dist - human_hallway_dist).item()
         if self.robot_state[0] <= 0:
@@ -307,7 +308,7 @@ class BulletHallwayEnv(gym.Env):
         self.prev_human_hallway_dist = human_hallway_dist
 
         # Compute reward
-        wrong_hallway_either = wrong_hallway or wrong_hallway_robot
+        wrong_hallway_either = wrong_hallway or (i_best_robot != self.robot_best_hallway_initial)
         self.compute_reward(wrong_hallway_either, intent_bonus)
         self.prev_dist_robot = self.dist_robot
         self.prev_dist_human = self.dist_human
@@ -323,8 +324,11 @@ class BulletHallwayEnv(gym.Env):
 
         if self.display_render:
             if self.tid is not None:
-                self.p.removeUserDebugItem(self.tid)
-            self.tid = self.p.addUserDebugText(f"Reward: {self.cumulative_reward}", [0, 0, 2], textSize=5, textColorRGB=[0, 0, 0])
+                for t in self.tid:
+                    self.p.removeUserDebugItem(t)
+                self.tid = []
+            self.tid.append(self.p.addUserDebugText(f"Reward: {self.cumulative_reward}", [0, 0, 2], textSize=5, textColorRGB=[0, 0, 0]))
+            self.tid.append(self.p.addUserDebugText(f"Robot Target: {self.robot_best_hallway_initial}", [0, 0, 1], textSize=5, textColorRGB=[0, 0, 0]))
 
         return observation, self.reward, self.done, truncated, info
 
@@ -371,7 +375,7 @@ class BulletHallwayEnv(gym.Env):
                     i_best = i
                     best_rect = other_rect
             wrong_hallway = self.intent_violation(self.robot_state, best_rect)
-            return robot_closest_wall_dist, best_rect, wrong_hallway
+            return robot_closest_wall_dist, best_rect, i_best
         
     def compute_reward(self, wrong_hallway, intent_bonus):
 
@@ -553,11 +557,13 @@ class BulletHallwayEnv(gym.Env):
         self.done = False
 
         human_hallway_dist, human_hallway, wrong_hallway = self.compute_dist_to_hallways(is_human=True)
-        robot_best_hallway_dist, robot_hallway, wrong_hallway_robot = self.compute_dist_to_hallways(is_human=False)
+        robot_best_hallway_dist, robot_hallway, i_best_robot = self.compute_dist_to_hallways(is_human=False)
+        self.robot_best_hallway_initial = i_best_robot
         self.prev_robot_hallway_dist = robot_best_hallway_dist
         self.prev_human_hallway_dist = human_hallway_dist
 
         observation = self.compute_observation(human_hallway)
+
 
         if self.log_history:
             self.append_state_history()
