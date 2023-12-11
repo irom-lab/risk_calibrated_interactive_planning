@@ -298,7 +298,7 @@ class BulletHallwayEnv(gym.Env):
         # Compute a bonus/penalty for the agents going to the optimal/suboptimal hallway
         intent_bonus = 0
         human_hallway_dist, human_hallway, wrong_hallway = self.compute_dist_to_hallways(is_human=True)
-        robot_best_hallway_dist, robot_hallway, i_best = self.compute_dist_to_hallways(is_human=False)
+        robot_best_hallway_dist, robot_hallway, wrong_hallway_robot = self.compute_dist_to_hallways(is_human=False)
         if self.human_state[0] >= 0:
             intent_bonus += (self.prev_human_hallway_dist - human_hallway_dist).item()
         if self.robot_state[0] <= 0:
@@ -307,7 +307,8 @@ class BulletHallwayEnv(gym.Env):
         self.prev_human_hallway_dist = human_hallway_dist
 
         # Compute reward
-        self.compute_reward(wrong_hallway, intent_bonus)
+        wrong_hallway_either = wrong_hallway or wrong_hallway_robot
+        self.compute_reward(wrong_hallway_either, intent_bonus)
         self.prev_dist_robot = self.dist_robot
         self.prev_dist_human = self.dist_human
 
@@ -369,7 +370,8 @@ class BulletHallwayEnv(gym.Env):
                     robot_closest_wall_dist = robot_intent_hallway_dist
                     i_best = i
                     best_rect = other_rect
-            return robot_closest_wall_dist, best_rect, i_best
+            wrong_hallway = self.intent_violation(self.robot_state, best_rect)
+            return robot_closest_wall_dist, best_rect, wrong_hallway
         
     def compute_reward(self, wrong_hallway, intent_bonus):
 
@@ -551,7 +553,7 @@ class BulletHallwayEnv(gym.Env):
         self.done = False
 
         human_hallway_dist, human_hallway, wrong_hallway = self.compute_dist_to_hallways(is_human=True)
-        robot_best_hallway_dist, robot_hallway, i_best = self.compute_dist_to_hallways(is_human=False)
+        robot_best_hallway_dist, robot_hallway, wrong_hallway_robot = self.compute_dist_to_hallways(is_human=False)
         self.prev_robot_hallway_dist = robot_best_hallway_dist
         self.prev_human_hallway_dist = human_hallway_dist
 
@@ -686,14 +688,14 @@ class BulletHallwayEnv(gym.Env):
         rgb_array = rgb_array[:, :, :3]
         img = rgb_array.astype(np.uint8).copy()
 
-        strx = 475
-        yoffset = 112
-        ydelta = 130
-        for i in range(5):
-            stry = yoffset + ydelta*i
-            str = f"{i}"
-            cv2.putText(img, str, (strx, stry),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.75, (1, 0, 0), 2, cv2.LINE_AA)
+        # strx = 475
+        # yoffset = 112
+        # ydelta = 130
+        # for i in range(5):
+        #     stry = yoffset + ydelta*i
+        #     str = f"{i}"
+        #     cv2.putText(img, str, (strx, stry),
+        #                 cv2.FONT_HERSHEY_SIMPLEX, 0.75, (1, 0, 0), 2, cv2.LINE_AA)
 
         strx = -int(self.robot_state[0]*70) + 475
         stry = 330 #-int(self.robot_state[1]*70) + 270
