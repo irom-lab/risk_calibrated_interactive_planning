@@ -7,18 +7,19 @@ import numpy as np
 
 class Racecar:
 
-  def __init__(self, bullet_client, urdfRootPath='', timeStep=0.01, pos=(0, 0, 0.2), orientation=(0, 0, 0, 1)):
+  def __init__(self, bullet_client, urdfRootPath='', timeStep=0.01, pos=(0, 0, 0.2), orientation=(0, 0, 0, 1), globalScaling=1):
     self.urdfRootPath = urdfRootPath
     self.timeStep = timeStep
     self._p = bullet_client
     self.pos = pos
     self.orientation = orientation
+    self.globalScaling = globalScaling
     self.reset()
 
   def reset(self):
     car = self._p.loadURDF(os.path.join(self.urdfRootPath, "racecar/racecar_differential.urdf"),
                            list(self.pos), list(self.orientation),
-                           useFixedBase=False)
+                           useFixedBase=False, globalScaling=self.globalScaling)
     self.racecarUniqueId = car
     #for i in range (self._p.getNumJoints(car)):
     #	print (self._p.getJointInfo(car,i))

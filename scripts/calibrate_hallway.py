@@ -26,9 +26,9 @@ if not use_bullet:
     model_num = 1700717235  # Best RGB
     model_num = 1701999480  # Best kinematic
 else:
-    model_num = 1702013145 # 300 from 3d hallway
+    model_num = 1702322915 # 300 from 3d hallway
 
-loaddir = os.path.join(home, f"PredictiveRL/models/{model_num}/epoch_25.zip")
+loaddir = os.path.join(home, f"PredictiveRL/models/{model_num}/epoch_100.zip")
 logdir = os.path.join(home, f"PredictiveRL/conformal_outputs/{int(time.time())}/")
 dataframe_path = os.path.join(home, f"PredictiveRL/conformal_outputs/{int(time.time())}.csv")
 
@@ -122,7 +122,7 @@ if __name__ == ("__main__"):
     model = PPO.load(loaddir, env=env)
 
 
-    num_calibration = 5
+    num_calibration = 1
     context_list = []
     label_list = []
     for _ in range(num_calibration):
@@ -167,7 +167,7 @@ if __name__ == ("__main__"):
         label = row[1]
         for k in range(context.shape[0]):
             save_path = f'/home/jlidard/PredictiveRL/language_img/hallway_tmp{k}.png'
-            img = Image.fromarray(context[k], 'RGB')
+            img = Image.fromarray(context[k])
             img.save(save_path)
         response = vlm(prompt=prompt, image_path=image_path) # response_str = response.json()["choices"][0]["message"]["content"]
         probs = hallway_parse_response(response)

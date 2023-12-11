@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import cv2
 import os
+from cv2.typing import Scalar
 from os.path import expanduser
 import random
 import time
@@ -43,12 +44,12 @@ WALL_YLEN = 1
 #     " in order starting with 0. Hallway 0 is at the top."
 
 prompt = "This is a metaphorical scenario of two toy cars navigating a room with 5 hallways numbered 0-4. " \
-    "This is a set of images from the scenario." \
-    "The Ego car is current heading towards a set of hallways, and could take any of them." \
+    "This is a set of images from the scenario. Hallway 0 is on the right; Hallway 4 is on the left. The black regions are the walls of the hallway and are invalid" \
+    "The Ego car is in the foreground in the bottom of the image. The Ego car is heading towards a set of hallways, and could take any of them." \
     "Based on the Ego car's trajectory, which of the hallways is it going towards?" \
     "Give approximate numerical probabilities for all hallways 0-4 as a bulleted list and explain each one." \
-    "Never give higher than 80% and lower than 10% since it's always best to be a little skeptical." \
-    "Always give adjacent hallways to your most-likely prediction a near-equal weight"
+    # "Never give higher than 80% and lower than 10% since it's always best to be a little skeptical." \
+    # "Always give adjacent hallways to your most-likely prediction a near-equal weight"
 
 # prompt = "This is a metaphorical scenario of two toy cars navigating a room with 5 hallways numbered 0-4. " \
 #     "The walls of the hallways are depicted in black." \
@@ -167,9 +168,9 @@ class BulletHallwayEnv(gym.Env):
         self.log_history = (history_log_path is not None)
         self.df_savepath = history_log_path
         self.urdfRoot = urdfRoot
-        self.cam_dist = 8
-        self.cam_yaw = 60 #-60
-        self.cam_pitch = -45
+        self.cam_dist = 7
+        self.cam_yaw = 65 #-60
+        self.cam_pitch = -30
         self.cam_targ = [0, 0, 0]
 
         if render:
@@ -240,10 +241,15 @@ class BulletHallwayEnv(gym.Env):
         boundarylongpath = os.path.join(home, 'PredictiveRL/object/boundary_long.urdf')
         boundaryshortpath = os.path.join(home, 'PredictiveRL/object/boundary_short.urdf')
         goalpath = os.path.join(home, 'PredictiveRL/object/goal.urdf')
+        floorpath = os.path.join(home,"PredictiveRL/object/floor.urdf" )
         self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
         self.plane = self.p.loadURDF("plane.urdf",
-                                     [0, 0, 0],
+                                     [0, 0, -1],
                                      [0, 0, 0, 1])
+        self.floor = self.p.loadURDF(floorpath,
+                                     [0, 0, -0.5],
+                                     [0, 0, 0, 1], useFixedBase=True)
+        # self.p.changeVisualShape(self.plane, -1, rgbaColor=[0.5, 0.5, 0.5, 1])
         wall1 = self.p.loadURDF(wallpath, [0, -3, 0], [0, 0, 0, 1],
                                 useFixedBase=True, useMaximalCoordinates=False)
         wall2 = self.p.loadURDF(wallpath, [0, -1, 0], [0, 0, 0, 1],
@@ -252,14 +258,15 @@ class BulletHallwayEnv(gym.Env):
                                 useFixedBase=True, useMaximalCoordinates=False)
         wall4 = self.p.loadURDF(wallpath, [0, 3, 0], [0, 0, 0, 1],
                                 useFixedBase=True, useMaximalCoordinates=False)
+        # test = self.p.loadURDF("table.urdf", [0, 0, 0], [0, 0, 0, 1])
 
         # Goals
         self.human_goal_rect= np.array([-5, 2, 2, 4])
         self.robot_goal_rect = np.array([3, 2, 2, 4])
         goal_orientation = self.p.getQuaternionFromEuler([0, 0, -np.pi / 2])
-        goal1 = self.p.loadURDF(goalpath, [self.robot_goal_rect[0]+1, 0, -0.4999], goal_orientation,
+        goal1 = self.p.loadURDF(goalpath, [self.robot_goal_rect[0]+1, 0, -0.495], goal_orientation,
                            useFixedBase=True)
-        goal2 = self.p.loadURDF(goalpath, [self.human_goal_rect[0]+1, 0, -0.4999], goal_orientation,
+        goal2 = self.p.loadURDF(goalpath, [self.human_goal_rect[0]+1, 0, -0.495], goal_orientation,
                            useFixedBase=True)
         self.wall_assets = [wall1, wall2, wall3, wall4]
         self.goal_assets = [goal1, goal2]
@@ -283,6 +290,8 @@ class BulletHallwayEnv(gym.Env):
         leftb = self.p.loadURDF(boundaryshortpath,[LEFT_BOUNDARY, 0, 0], rplane_orientation, useFixedBase=True)
         rightb = self.p.loadURDF(boundaryshortpath,[RIGHT_BOUNDARY,0, 0], leftplane_orientation, useFixedBase=True)
         self.boundary_assets = [ub, lb, leftb, rightb]
+        for ba in self.boundary_assets:
+            self.p.changeVisualShape(ba, -1, rgbaColor=[0, 1, 0, 0.5])
         self.tid = []
         self.rollout_counter = 0
         self.reset_state_history()
@@ -308,7 +317,7 @@ class BulletHallwayEnv(gym.Env):
         self.prev_human_hallway_dist = human_hallway_dist
 
         # Compute reward
-        wrong_hallway_either = wrong_hallway or (i_best_robot != self.robot_best_hallway_initial)
+        wrong_hallway_either = wrong_hallway or (self.robot_state[0] <= 0 and i_best_robot != self.robot_best_hallway_initial)
         self.compute_reward(wrong_hallway_either, intent_bonus)
         self.prev_dist_robot = self.dist_robot
         self.prev_dist_human = self.dist_human
@@ -503,15 +512,19 @@ class BulletHallwayEnv(gym.Env):
         wall_down = wall_up - WALL_YLEN
         rect = (wall_left, wall_up, WALL_XLEN, WALL_YLEN)
 
+
         if self.human is None:
+            scale = 1.5
             self.human = racecar.Racecar(self.p, urdfRootPath=self.urdfRoot, timeStep=self.timesteps,
-                                         pos=(human_position[0],human_position[1],0.2),
-                                         orientation=human_orientation)
+                                         pos=(human_position[0],human_position[1],0.2*scale),
+                                         orientation=human_orientation,
+                                         globalScaling=scale)
             self.robot = racecar.Racecar(self.p, urdfRootPath=self.urdfRoot, timeStep=self.timesteps,
-                                         pos=(robot_position[0],robot_position[1],0.2),
-                                         orientation=robot_orientation)
+                                         pos=(robot_position[0],robot_position[1],0.2*scale),
+                                         orientation=robot_orientation,
+                                         globalScaling=scale)
             if self.show_intent:
-                intent = self.p.loadURDF(self.wallpath, [wall_left + WALL_XLEN / 2, wall_up - WALL_YLEN / 2, -0.4999],
+                intent = self.p.loadURDF(self.wallpath, [wall_left + WALL_XLEN / 2, wall_up - WALL_YLEN / 2, -0.495],
                                          [0, 0, 0, 1],
                                          useFixedBase=True)
                 self.p.changeVisualShape(intent, -1, rgbaColor=[1, 0, 0, 0.5])
@@ -530,11 +543,18 @@ class BulletHallwayEnv(gym.Env):
             for boundary in self.boundary_assets:
                 self.p.setCollisionFilterPair(boundary, self.human.racecarUniqueId, -1, -1, enableCollision)
                 self.p.setCollisionFilterPair(boundary, self.robot.racecarUniqueId, -1, -1, enableCollision)
+
+            for goal in self.goal_assets:
+                self.p.setCollisionFilterPair(goal, self.human.racecarUniqueId, -1, -1, enableCollision)
+                self.p.setCollisionFilterPair(goal, self.robot.racecarUniqueId, -1, -1, enableCollision)
+
+            self.p.setCollisionFilterPair(self.floor, self.human.racecarUniqueId, -1, -1, enableCollision)
+            self.p.setCollisionFilterPair(self.floor, self.robot.racecarUniqueId, -1, -1, enableCollision)
         else:
             self.p.resetBasePositionAndOrientation(self.human.racecarUniqueId,(human_position[0],human_position[1],0.2),human_orientation)
             self.p.resetBasePositionAndOrientation(self.robot.racecarUniqueId,(robot_position[0],robot_position[1],0.2),robot_orientation)
             if self.show_intent:
-                self.p.resetBasePositionAndOrientation(self.intent_asset, [wall_left + WALL_XLEN / 2, wall_up - WALL_YLEN / 2, -0.4999], [0, 0, 0, 1])
+                self.p.resetBasePositionAndOrientation(self.intent_asset, [wall_left + WALL_XLEN / 2, wall_up - WALL_YLEN / 2, -0.495], [0, 0, 0, 1])
 
 
         self.human.applyAction([0, 0])
@@ -593,7 +613,7 @@ class BulletHallwayEnv(gym.Env):
 
         if self.show_intent:
             self.p.resetBasePositionAndOrientation(self.intent_asset,
-                                                   [wall_left + WALL_XLEN / 2, wall_up - WALL_YLEN / 2, -0.4999],
+                                                   [wall_left + WALL_XLEN / 2, wall_up - WALL_YLEN / 2, -0.495],
                                                    [0, 0, 0, 1])
 
     def dynamics(self, state, other_state, control, is_human=False):
@@ -673,45 +693,42 @@ class BulletHallwayEnv(gym.Env):
         # if mode != "rgb_array":
         #     return np.array([])
         base_pos, orn = self.p.getBasePositionAndOrientation(self.robot.racecarUniqueId)
+
+        if self.tid is not None:
+            for t in self.tid:
+                self.p.removeUserDebugItem(t)
+            self.tid = []
+        self.tid.append(self.p.addUserDebugText(f"Reward: {self.cumulative_reward}", [0, 0, 2], textSize=5, textColorRGB=[0, 0, 0]))
+        self.tid.append(self.p.addUserDebugText(f"Robot Target: {self.robot_best_hallway_initial}", [0, 0, 1], textSize=5, textColorRGB=[0, 0, 0]))
+
+
         view_matrix = self.p.computeViewMatrixFromYawPitchRoll(cameraTargetPosition=self.cam_targ,
                                                                 distance=self.cam_dist,
                                                                 yaw=self.cam_yaw,
                                                                 pitch=self.cam_pitch,
                                                                 roll=0,
                                                                 upAxisIndex=2)
+
         proj_matrix = self.p.computeProjectionMatrixFOV(fov=60,
                                                          aspect=float(RENDER_WIDTH) / RENDER_HEIGHT,
                                                          nearVal=0.1,
                                                          farVal=100.0)
-        (w, h, px, _, _) = self.p.getCameraImage(width=RENDER_WIDTH,
+        (w, h, rgb_px_gl, _, _) = self.p.getCameraImage(width=RENDER_WIDTH,
                                                   height=RENDER_HEIGHT,
                                                   viewMatrix=view_matrix,
                                                   projectionMatrix=proj_matrix,
+                                                  shadow=1,
                                                   renderer=pybullet.ER_BULLET_HARDWARE_OPENGL)
-        rgb_array = np.array(px)
-        rgb_array = np.reshape(rgb_array, (h, w, 4))
-        #rgb_array = np.transpose(rgb_array, (2, 0, 1))
-        rgb_array = rgb_array[:, :, :3]
-        img = rgb_array.astype(np.uint8).copy()
+        rgb_px_gl = np.array(rgb_px_gl, 'uint8').reshape(h, w , 4)[:, :, :3]
 
-        # strx = 475
-        # yoffset = 112
-        # ydelta = 130
-        # for i in range(5):
-        #     stry = yoffset + ydelta*i
-        #     str = f"{i}"
-        #     cv2.putText(img, str, (strx, stry),
-        #                 cv2.FONT_HERSHEY_SIMPLEX, 0.75, (1, 0, 0), 2, cv2.LINE_AA)
+        rgb_px_gl = rgb_px_gl.copy()
+        font = cv2.FONT_HERSHEY_SIMPLEX
 
-        strx = -int(self.robot_state[0]*70) + 475
-        stry = 330 #-int(self.robot_state[1]*70) + 270
-        # img = img.astype(np.uint8).copy()
-        # str = f"Ego Car"
-        # cv2.putText(img, str, (strx, stry),
-        #             cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2, cv2.LINE_AA)
+        for i in range(5):
+            cv2.putText(rgb_px_gl, f"{i}", (60 + i*200, 100 + RENDER_HEIGHT//2 - i*45),
+                        font, 1, (255, 0, 0), 2, cv2.LINE_AA)
 
-        return img #[:, img.shape[0]//2:]
-
+        return rgb_px_gl
 
     def save_state_history(self):
 
