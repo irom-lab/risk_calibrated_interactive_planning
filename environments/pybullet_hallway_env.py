@@ -723,10 +723,10 @@ class BulletHallwayEnv(gym.Env):
 
         rgb_px_gl = rgb_px_gl.copy()
         font = cv2.FONT_HERSHEY_SIMPLEX
-
-        for i in range(5):
-            cv2.putText(rgb_px_gl, f"{i}", (60 + i*200, 100 + RENDER_HEIGHT//2 - i*45),
-                        font, 1, (255, 0, 0), 2, cv2.LINE_AA)
+        #
+        # for i in range(5):
+        #     cv2.putText(rgb_px_gl, f"{i}", (60 + i*200, 100 + RENDER_HEIGHT//2 - i*45),
+        #                 font, 1, (255, 0, 0), 2, cv2.LINE_AA)
 
         return rgb_px_gl
 

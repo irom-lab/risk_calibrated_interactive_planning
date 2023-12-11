@@ -104,7 +104,7 @@ if __name__ == ("__main__"):
         )
 
     print('Training Policy.')
-    policy_kwargs = dict(net_arch=dict(pi=[256, 128, 64], vf=[256, 128, 64]))
+    policy_kwargs = dict(net_arch=dict(pi=[256, 256, 256], vf=[256, 256, 256]))
     model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir,
                 n_steps=max_steps, n_epochs=10, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs,
                 device=device)
