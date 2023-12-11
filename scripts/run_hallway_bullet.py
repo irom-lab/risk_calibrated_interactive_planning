@@ -53,6 +53,8 @@ else:
     online = False
     load_model = False
 
+log_history = False
+
 if load_model:
     load_path = '/home/jlidard/PredictiveRL/models/1702013145/model_best_450'
 else:
@@ -79,13 +81,16 @@ if __name__ == ("__main__"):
     timesteps = max_steps
 
     # Create the vectorized environment
-    env = SubprocVecEnv([make_bullet_env(i, render=render, debug=debug,
-                                  time_limit=max_steps, rgb_observation=rgb_observation) for i in range(num_cpu)])
-    # env = VecFrameStack(env, n_stack=4)
+    env = SubprocVecEnv([make_bullet_env(i,
+                                         render=render,
+                                         debug=debug,
+                                         time_limit=max_steps,
+                                         rgb_observation=rgb_observation,
+                                         history_log_path=logdir)
+                         for i in range(num_cpu)])
     env = VecMonitor(env, logdir + "log")
     videnv = BulletHallwayEnv(render=render, debug=debug, time_limit=max_steps, rgb_observation=rgb_observation)
     videnv = DummyVecEnv([lambda: videnv])
-    # videnv = VecFrameStack(videnv, n_stack=4)
     videnv = VecVideoRecorder(videnv, video_folder=logdir, record_video_trigger=lambda x: True, video_length=video_length)
 
     if online:

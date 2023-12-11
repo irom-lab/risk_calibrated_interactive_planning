@@ -1,6 +1,7 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
+import pandas as pd
 import cv2
 import os
 from os.path import expanduser
@@ -112,6 +113,14 @@ def wall_set_distance(walls, robot_pos):
         wall_dist.append(signed_dist)
     return np.array(wall_dist)
 
+def hallway_l2_dist(rect, pos):
+    left, up, dx, dy = rect
+    right = left + dx
+    down = up - dy
+    centroid = np.array([(left+right)/2, (up+down)/2])
+    dist = np.linalg.norm(pos[:2]-centroid)
+    return dist
+
 def rect_set_dist(rect, pos):
     (rect_left, rect_up, drect_right, drect_down) = rect
     rect_down = rect_up - drect_down
@@ -152,13 +161,15 @@ class BulletHallwayEnv(gym.Env):
 
     def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=1, deterministic_intent=None,
                  debug=False, render_mode="rgb_array", time_limit=100, rgb_observation=False,
-                 urdfRoot=pybullet_data.getDataPath(), show_intent=True):
+                 urdfRoot=pybullet_data.getDataPath(), show_intent=True,history_log_path=None):
         super(BulletHallwayEnv, self).__init__()
         self.show_intent = show_intent
+        self.log_history = (history_log_path is not None)
+        self.df_savepath = history_log_path
         self.urdfRoot = urdfRoot
-        self.cam_dist = 10
-        self.cam_yaw = 0 #-60
-        self.cam_pitch = -90
+        self.cam_dist = 8
+        self.cam_yaw = 60 #-60
+        self.cam_pitch = -45
         self.cam_targ = [0, 0, 0]
 
         if render:
@@ -272,33 +283,8 @@ class BulletHallwayEnv(gym.Env):
         rightb = self.p.loadURDF(boundaryshortpath,[RIGHT_BOUNDARY,0, 0], leftplane_orientation, useFixedBase=True)
         self.boundary_assets = [ub, lb, leftb, rightb]
         self.tid = None
-
-
-        # upperplane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
-        #                              [0, UPPER_BOUNDARY, 0],
-        #                              uplane_orientation)
-        # self.p.changeVisualShape(upperplane, -1, rgbaColor=[0, 0, 0, 0.4])
-        # rplane_orientation = self.p.getQuaternionFromEuler([0, np.pi/2, 0])
-        # rightplane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
-        #                              [RIGHT_BOUNDARY, 0, 0],
-        #                              rplane_orientation)
-        # self.p.changeVisualShape(rightplane, -1, rgbaColor=[0, 0, 0, 0.4])
-        # lplane_orientation = self.p.getQuaternionFromEuler([0, np.pi/2, 0])
-        # leftplane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
-        #                              [LEFT_BOUNDARY, 0, 0],
-        #                              lplane_orientation)
-        # self.p.changeVisualShape(leftplane, -1, rgbaColor=[0, 0, 0, 0.4])
-        # dplane_orientation = self.p.getQuaternionFromEuler([np.pi/2, 0, 0])
-        # lowerplane = self.p.loadURDF("/Users/justinlidard/bullet3/examples/pybullet/gym/pybullet_data/plane.urdf",
-        #                              [0, LOWER_BOUNDARY, 0],
-        #                              dplane_orientation)
-        # self.p.changeVisualShape(lowerplane, -1, rgbaColor=[0, 0, 0, 0.4])
-
-
-
-    def state_history_numpy(self):
-        state_history = np.array(self.prev_states).flatten()
-        return state_history
+        self.rollout_counter = 0
+        self.reset_state_history()
 
     def step(self, action):
 
@@ -314,9 +300,9 @@ class BulletHallwayEnv(gym.Env):
         human_hallway_dist, human_hallway, wrong_hallway = self.compute_dist_to_hallways(is_human=True)
         robot_best_hallway_dist, robot_hallway, i_best = self.compute_dist_to_hallways(is_human=False)
         if self.human_state[0] > self.walls[0][0]:
-            intent_bonus = self.prev_robot_hallway_dist - robot_best_hallway_dist + \
-                           (self.prev_human_hallway_dist - human_hallway_dist)
-            intent_bonus = intent_bonus.item()
+            intent_bonus += (self.prev_human_hallway_dist - human_hallway_dist).item()
+        if self.robot_state[0] < self.walls[0][0] + WALL_XLEN:
+            intent_bonus += (self.prev_robot_hallway_dist - robot_best_hallway_dist).item()
         self.prev_robot_hallway_dist = robot_best_hallway_dist
         self.prev_human_hallway_dist = human_hallway_dist
 
@@ -328,6 +314,11 @@ class BulletHallwayEnv(gym.Env):
         info = {}
         truncated = False
         observation = self.compute_observation(human_hallway)
+
+        if self.log_history:
+            self.append_state_history()
+            if self.done:
+                self.save_state_history()
 
         if self.display_render:
             if self.tid is not None:
@@ -360,7 +351,7 @@ class BulletHallwayEnv(gym.Env):
             wall_up = wall_coord[1] + WALL_YLEN
             rect = (wall_left, wall_up, WALL_XLEN, WALL_YLEN)
             wrong_hallway = self.intent_violation(self.human_state, rect)
-            human_intent_hallway_dist = wall_set_distance([rect[:2]], self.human_state)[0]
+            human_intent_hallway_dist = hallway_l2_dist(rect, self.human_state) # wall_set_distance([rect[:2]], self.human_state)[0]
             return human_intent_hallway_dist, rect, wrong_hallway
         else:
             robot_closest_wall_dist = np.inf
@@ -373,7 +364,7 @@ class BulletHallwayEnv(gym.Env):
                 wall_right = WALL_XLEN
                 wall_up = other_wall[1] + WALL_YLEN
                 other_rect = (wall_left, wall_up, WALL_XLEN, WALL_YLEN)
-                robot_intent_hallway_dist = wall_set_distance(([other_rect[:2]]), self.robot_state)
+                robot_intent_hallway_dist = hallway_l2_dist(other_rect, self.robot_state) # wall_set_distance(([other_rect[:2]]), self.robot_state)
                 if robot_intent_hallway_dist < robot_closest_wall_dist:
                     robot_closest_wall_dist = robot_intent_hallway_dist
                     i_best = i
@@ -434,8 +425,8 @@ class BulletHallwayEnv(gym.Env):
             self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
             observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing]),
                                          human_wall_dist, robot_wall_dist,
-                                         wall_set_distance([hallway], self.human_state),
-                                         wall_set_distance([hallway], self.robot_state),
+                                         np.array([hallway_l2_dist(hallway, self.human_state),
+                                                  hallway_l2_dist(hallway, self.robot_state)]),
                                          self.robot_state[-1:], self.human_state[-1:],
                                          np.array([self.dist_robot, self.dist_human])))
         observation = {"obs": observation, "mode": np.eye(5)[self.intent]}
@@ -565,6 +556,11 @@ class BulletHallwayEnv(gym.Env):
         self.prev_human_hallway_dist = human_hallway_dist
 
         observation = self.compute_observation(human_hallway)
+
+        if self.log_history:
+            self.append_state_history()
+            if self.done:
+                self.save_state_history()
 
         return observation, {}
 
@@ -707,6 +703,34 @@ class BulletHallwayEnv(gym.Env):
         #             cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2, cv2.LINE_AA)
 
         return img #[:, img.shape[0]//2:]
+
+
+    def save_state_history(self):
+
+        all_robot_state = np.stack(self.robot_state_history)
+        all_human_state = np.stack(self.human_state_history)
+        all_intent = np.stack(self.intent_history)
+        df = pd.DataFrame({"robot_state_x": all_robot_state[:, 0],
+                           "robot_state_y": all_robot_state[:, 1],
+                           "robot_state_heading": all_robot_state[:, 2],
+                           "human_state_x": all_human_state[:, 0],
+                           "human_state_y": all_human_state[:, 1],
+                           "human_state_heading": all_human_state[:, 2],
+                           "human_intent": all_intent})
+        os.makedirs(f"{self.df_savepath}/rollouts/", exist_ok=True)
+        df.to_csv(f"{self.df_savepath}/rollouts/rollout_{self.rollout_counter}.csv")
+        self.reset_state_history()
+
+    def append_state_history(self):
+        self.robot_state_history.append(self.robot_state)
+        self.human_state_history.append(self.human_state)
+        self.intent_history.append(self.intent)
+
+    def reset_state_history(self):
+        self.robot_state_history = []
+        self.human_state_history = []
+        self.intent_history = []
+        self.rollout_counter += 1
 
 
 
