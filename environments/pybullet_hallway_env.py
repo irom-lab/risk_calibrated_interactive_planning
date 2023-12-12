@@ -206,7 +206,7 @@ class BulletHallwayEnv(gym.Env):
             self.observation_space = {"obs": spaces.Box(low=0, high=255, shape=(256, 256, 3), dtype=np.uint8),
                                       "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)}
         else:
-            self.observation_space = {"obs": spaces.Box(low=-np.inf, high=np.inf, shape=(18,), dtype=np.float32),
+            self.observation_space = {"obs": spaces.Box(low=-np.inf, high=np.inf, shape=(20,), dtype=np.float32),
                                       "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)}
                                   # "agent": spaces.Box(low=0, high=1, shape=(2,), dtype=np.float32)}
         self.observation_space = spaces.Dict(self.observation_space)
@@ -325,7 +325,7 @@ class BulletHallwayEnv(gym.Env):
 
         info = {}
         truncated = False
-        observation = self.compute_observation(human_hallway)
+        observation = self.compute_observation(human_hallway, robot_hallway)
 
         if self.log_history:
             self.append_state_history()
@@ -426,7 +426,7 @@ class BulletHallwayEnv(gym.Env):
         self.prev_reward = self.reward
         self.cumulative_reward += self.reward
 
-    def compute_observation(self, hallway):
+    def compute_observation(self, hallway, robot_hallway):
 
         if self.rgb_observation:
             self.get_image(resolution_scale=1)
@@ -441,8 +441,10 @@ class BulletHallwayEnv(gym.Env):
             self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
             observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing]),
                                          human_wall_dist, robot_wall_dist,
-                                         np.array([hallway_l2_dist(hallway, self.human_state),
-                                                  hallway_l2_dist(hallway, self.robot_state)]),
+                                          np.array([hallway_l2_dist(hallway, self.human_state),
+                                                    hallway_l2_dist(hallway, self.robot_state)]),
+                                         np.array([hallway_l2_dist(robot_hallway, self.human_state),
+                                                  hallway_l2_dist(robot_hallway, self.robot_state)]),
                                          self.robot_state[-1:], self.human_state[-1:],
                                          np.array([self.dist_robot, self.dist_human])))
         observation = {"obs": observation, "mode": np.eye(5)[self.intent]}
@@ -583,7 +585,7 @@ class BulletHallwayEnv(gym.Env):
         self.prev_robot_hallway_dist = robot_best_hallway_dist
         self.prev_human_hallway_dist = human_hallway_dist
 
-        observation = self.compute_observation(human_hallway)
+        observation = self.compute_observation(human_hallway, robot_hallway)
 
 
         if self.log_history:
