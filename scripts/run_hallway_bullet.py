@@ -29,7 +29,6 @@ from wandb_osh.hooks import TriggerWandbSyncHook  # <-- New!
 def run():
     parser = argparse.ArgumentParser(
         prog='BulletHallwayEnv')
-    parser.add_argument()
 
     trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
