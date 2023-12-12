@@ -162,7 +162,7 @@ class BulletHallwayEnv(gym.Env):
 
     def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=1, deterministic_intent=None,
                  debug=False, render_mode="rgb_array", time_limit=100, rgb_observation=False,
-                 urdfRoot=pybullet_data.getDataPath(), show_intent=True,history_log_path=None):
+                 urdfRoot=pybullet_data.getDataPath(), show_intent=True, history_log_path=None):
         super(BulletHallwayEnv, self).__init__()
         self.show_intent = show_intent
         self.log_history = (history_log_path is not None)

@@ -6,6 +6,7 @@ from environments.make_vectorized_hallway_env import make_bullet_env
 import os
 import time
 import torch
+import argparse
 
 from gymnasium.envs.registration import register
 from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv, VecFrameStack
@@ -25,54 +26,59 @@ from os.path import expanduser
 import wandb
 from wandb_osh.hooks import TriggerWandbSyncHook  # <-- New!
 
-trigger_sync = TriggerWandbSyncHook()  # <--- New!
+def run():
+    parser = argparse.ArgumentParser(
+        prog='BulletHallwayEnv')
+    parser.add_argument()
 
-node = platform.node()
-if node == 'mae-majumdar-lab6' or node == "jlidard":
-    home = expanduser("~")   # lab desktop
-    num_cpu = 1
-    max_steps = 100
-    render = True
-    debug = False
-    online = False
-    load_model = False
-elif node == 'mae-ani-lambda':
-    home = expanduser("~")   # della fast IO file system
-    num_cpu = 128
-    max_steps = 200
-    render = False
-    debug = False
-    online = True
-    load_model = False
-else:
-    home = '/scratch/gpfs/jlidard/'  # della fast IO file system
-    num_cpu = 128
-    max_steps = 300
-    render = False
-    debug = False
-    online = False
-    load_model = False
+    trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
-log_history = False
+    node = platform.node()
+    if node == 'mae-majumdar-lab6' or node == "jlidard":
+        home = expanduser("~")   # lab desktop
+        num_cpu = 32
+        max_steps = 100
+        render = False
+        debug = False
+        online = False
+        load_model = True
+    elif node == 'mae-ani-lambda':
+        home = expanduser("~")   # della fast IO file system
+        num_cpu = 128
+        max_steps = 200
+        render = False
+        debug = False
+        online = True
+        load_model = False
+    else:
+        home = '/scratch/gpfs/jlidard/'  # della fast IO file system
+        num_cpu = 128
+        max_steps = 300
+        render = False
+        debug = False
+        online = False
+        load_model = False
 
-if load_model:
-    load_path = '/home/jlidard/PredictiveRL/models/1702013145/model_best_450'
-else:
-    load_path = None
+    log_history = False
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
-models_dir = f"{home}/PredictiveRL/models/{int(time.time())}/"
-logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
-
-os.makedirs(models_dir, exist_ok=True)
-
-rgb_observation = False
-# 'if __name__' Necessary for multithreading
-if __name__ == ("__main__"):
-    episodes = 1
     if load_model:
-        learn_steps = 25000
+        load_path = '/home/jlidard/PredictiveRL/models/1702407888/model_best_225'
+    else:
+        load_path = None
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    models_dir = f"{home}/PredictiveRL/models/{int(time.time())}/"
+    logdir = os.path.join(home, f"PredictiveRL/logs/{int(time.time())}/")
+    history_log_path = logdir if log_history else None
+
+    os.makedirs(models_dir, exist_ok=True)
+
+    rgb_observation = False
+
+    episodes = 1
+    if log_history:
+        learn_steps = 100
     else:
         learn_steps = 25000
     save_freq = 100000
@@ -86,7 +92,7 @@ if __name__ == ("__main__"):
                                          debug=debug,
                                          time_limit=max_steps,
                                          rgb_observation=rgb_observation,
-                                         history_log_path=logdir)
+                                         history_log_path=history_log_path)
                          for i in range(num_cpu)])
     env = VecMonitor(env, logdir + "log")
     videnv = BulletHallwayEnv(render=render, debug=debug, time_limit=max_steps, rgb_observation=rgb_observation)
@@ -136,7 +142,7 @@ if __name__ == ("__main__"):
             if ep_mean_reward >= best_mean_reward:
                 model.save(os.path.join(models_dir, f"model_best_{iter}"))
 
-        if iter % 50 == 0:
+        if iter % 50 == 0 and not log_history:
             record_video(videnv, model, video_length=video_length, num_videos=2)
 
 
@@ -144,3 +150,7 @@ if __name__ == ("__main__"):
         if not online:
             trigger_sync()  # <-- New!
     print("...Done.")
+
+
+if __name__ == "__main__":
+    run()
