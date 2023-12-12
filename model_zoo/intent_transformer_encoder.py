@@ -4,12 +4,11 @@ from model_zoo.model_utils import create_mlp
 
 class IntentFormerEncoder(torch.nn.Module):
 
-    def __init__(self, hidden_dim, past_horizon, num_segments, params):
+    def __init__(self, hidden_dim, num_segments, params):
 
         super(IntentFormerEncoder, self).__init__()
 
         self.hidden_dim = hidden_dim
-        self.past_horizon = past_horizon
         self.num_segments = num_segments
         self.params = params
         in_size = params["traj_input_dim"]
@@ -33,7 +32,7 @@ class IntentFormerEncoder(torch.nn.Module):
         B, T, D = input.shape
         num_segments = self.num_segments
 
-        input_reshaped = input.reshape(B, num_segments, -1)
+        input_reshaped = input
         encoded_input = self.local_mlp(input_reshaped)
 
         transformer_embedding = self.transformer_encoder(encoded_input)

@@ -309,6 +309,7 @@ class BulletHallwayEnv(gym.Env):
         intent_bonus = 0
         human_hallway_dist, human_hallway, wrong_hallway = self.compute_dist_to_hallways(is_human=True)
         robot_best_hallway_dist, robot_hallway, i_best_robot = self.compute_dist_to_hallways(is_human=False)
+        self.i_best_robot = i_best_robot
         if self.human_state[0] >= 0:
             intent_bonus += (self.prev_human_hallway_dist - human_hallway_dist).item()
         if self.robot_state[0] <= 0:
@@ -317,7 +318,7 @@ class BulletHallwayEnv(gym.Env):
         self.prev_human_hallway_dist = human_hallway_dist
 
         # Compute reward
-        wrong_hallway_either = wrong_hallway or (self.robot_state[0] <= 0 and i_best_robot != self.robot_best_hallway_initial)
+        wrong_hallway_either = wrong_hallway or (-1 <= self.robot_state[0] <= 1 and i_best_robot != self.robot_best_hallway_initial)
         self.compute_reward(wrong_hallway_either, intent_bonus)
         self.prev_dist_robot = self.dist_robot
         self.prev_dist_human = self.dist_human
@@ -514,7 +515,7 @@ class BulletHallwayEnv(gym.Env):
 
 
         if self.human is None:
-            scale = 1.5
+            scale = 1
             self.human = racecar.Racecar(self.p, urdfRootPath=self.urdfRoot, timeStep=self.timesteps,
                                          pos=(human_position[0],human_position[1],0.2*scale),
                                          orientation=human_orientation,
@@ -578,7 +579,7 @@ class BulletHallwayEnv(gym.Env):
 
         human_hallway_dist, human_hallway, wrong_hallway = self.compute_dist_to_hallways(is_human=True)
         robot_best_hallway_dist, robot_hallway, i_best_robot = self.compute_dist_to_hallways(is_human=False)
-        self.robot_best_hallway_initial = i_best_robot
+        self.robot_best_hallway_initial = self.i_best_robot = i_best_robot
         self.prev_robot_hallway_dist = robot_best_hallway_dist
         self.prev_human_hallway_dist = human_hallway_dist
 
@@ -699,7 +700,7 @@ class BulletHallwayEnv(gym.Env):
                 self.p.removeUserDebugItem(t)
             self.tid = []
         self.tid.append(self.p.addUserDebugText(f"Reward: {self.cumulative_reward}", [0, 0, 2], textSize=5, textColorRGB=[0, 0, 0]))
-        self.tid.append(self.p.addUserDebugText(f"Robot Target: {self.robot_best_hallway_initial}", [0, 0, 1], textSize=5, textColorRGB=[0, 0, 0]))
+        self.tid.append(self.p.addUserDebugText(f"Robot Target: {self.i_best_robot}; Initial: {self.robot_best_hallway_initial}", [0, 0, 1], textSize=5, textColorRGB=[0, 0, 0]))
 
 
         view_matrix = self.p.computeViewMatrixFromYawPitchRoll(cameraTargetPosition=self.cam_targ,

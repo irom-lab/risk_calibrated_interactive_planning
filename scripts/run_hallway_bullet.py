@@ -31,11 +31,11 @@ node = platform.node()
 if node == 'mae-majumdar-lab6' or node == "jlidard":
     home = expanduser("~")   # lab desktop
     num_cpu = 1
-    max_steps = 300
+    max_steps = 100
     render = True
     debug = False
     online = False
-    load_model = True
+    load_model = False
 elif node == 'mae-ani-lambda':
     home = expanduser("~")   # della fast IO file system
     num_cpu = 128

@@ -11,7 +11,7 @@ from collections import OrderedDict
 class IntentPredictionDataset(Dataset):
     """Face Landmarks dataset."""
 
-    def __init__(self, root_dir, max_in_set=5):
+    def __init__(self, root_dir, train_set_size=5, is_train=True, max_pred=100):
         """
         Arguments:
             csv_file (string): Path to the csv file with annotations.
@@ -19,13 +19,17 @@ class IntentPredictionDataset(Dataset):
             transform (callable, optional): Optional transform to be applied
                 on a sample.
         """
-        subdirs = os.listdir(root_dir)
+        self.max_pred = max_pred
+        subdirs = sorted(os.listdir(root_dir))
+        self.is_train = is_train
+        if is_train:
+            subdirs = subdirs[:train_set_size]
+        else:
+            subdirs = subdirs[train_set_size:]
         self.traj_dict = OrderedDict()
         self.file_names = {}
         i = 0
         for subdir in subdirs:
-            if i > max_in_set:
-                break
             file_path = os.path.join(root_dir, subdir)
             if not os.path.isfile(file_path):
                 continue
@@ -43,12 +47,12 @@ class IntentPredictionDataset(Dataset):
         rollout_data = self.traj_dict[filename]
 
         traj_len = len(rollout_data.index)
-        frac_stop = np.random.randint(10) + 1
+        frac_stop = np.random.randint(10) + 3
         Tstop = traj_len // frac_stop
 
         state_history = torch.Tensor(rollout_data.iloc[:Tstop, :-1].values).cuda()
-        state_gt = torch.Tensor(rollout_data.iloc[Tstop:, 3:5].values).cuda()
-        intent_gt = torch.Tensor(rollout_data.iloc[Tstop:, -1].values).cuda()
+        state_gt = torch.Tensor(rollout_data.iloc[Tstop:Tstop+self.max_pred, 3:5].values).cuda()
+        intent_gt = torch.Tensor(rollout_data.iloc[Tstop:Tstop+self.max_pred, -1].values).cuda()
 
         ret_dict = {"state_history": state_history,
                     "state_gt": state_gt,

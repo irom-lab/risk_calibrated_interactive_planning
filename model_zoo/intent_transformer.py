@@ -5,13 +5,13 @@ from model_zoo.model_utils import create_mlp
 
 class IntentFormer(torch.nn.Module):
 
-    def __init__(self, hidden_dim, past_horizon, num_segments, prediction_horizon, params={}):
+    def __init__(self, hidden_dim, num_segments, prediction_horizon, params={}):
 
         super(IntentFormer, self).__init__()
 
         self.name = "WindFormer"
 
-        self.encoder = self.create_encoder(hidden_dim, past_horizon, num_segments, params)
+        self.encoder = self.create_encoder(hidden_dim, num_segments, params)
         self.decoder = self.create_decoder(hidden_dim, prediction_horizon, num_segments, params)
 
     def forward(self, input):
@@ -19,8 +19,8 @@ class IntentFormer(torch.nn.Module):
         output = self.decoder(output)
         return output
 
-    def create_encoder(self, hidden_dim, past_horizon, num_segments, params):
-        encoder = IntentFormerEncoder(hidden_dim, past_horizon, num_segments, params)
+    def create_encoder(self, hidden_dim, num_segments, params):
+        encoder = IntentFormerEncoder(hidden_dim, num_segments, params)
         return encoder
 
     def create_decoder(self, hidden_dim, future_horizon, num_segments, params):
