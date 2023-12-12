@@ -5,9 +5,9 @@ import numpy as np
 def record_video(videnv, model, video_length=200, num_videos=3):
     print('Recording videos...')
     for intent in range(num_videos):
-        obs = videnv.reset()
         intent=np.random.choice(5)
         videnv.env.envs[0].seed_intent(HumanIntent(intent))
+        obs = videnv.reset()
         total_reward = 0
         for i in range(video_length):
             action, _states = model.predict(obs, deterministic=True)

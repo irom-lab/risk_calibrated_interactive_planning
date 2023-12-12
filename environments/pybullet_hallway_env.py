@@ -318,7 +318,7 @@ class BulletHallwayEnv(gym.Env):
         self.prev_human_hallway_dist = human_hallway_dist
 
         # Compute reward
-        wrong_hallway_either = wrong_hallway or (-1 <= self.robot_state[0] <= 1 and i_best_robot != self.robot_best_hallway_initial)
+        wrong_hallway_either = wrong_hallway # or (-1 <= self.robot_state[0] <= 1 and i_best_robot != self.robot_best_hallway_initial)
         self.compute_reward(wrong_hallway_either, intent_bonus)
         self.prev_dist_robot = self.dist_robot
         self.prev_dist_human = self.dist_human
@@ -492,7 +492,7 @@ class BulletHallwayEnv(gym.Env):
             human_position = np.array([6.5, 0])
             human_heading = np.pi + np.pi #np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
         else:
-            human_position = np.array([np.random.uniform(low=5.5, high=6.5), np.random.uniform(low=-2, high=2)])
+            human_position = np.array([np.random.uniform(low=5, high=6), np.random.uniform(low=-4, high=4)])
             human_heading = 0  #+ np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
         self.human_state = np.array([human_position[0], human_position[1], human_heading], dtype=np.float32)
 
@@ -500,7 +500,7 @@ class BulletHallwayEnv(gym.Env):
             robot_position = np.array([-6.5, 0])
             robot_heading = np.pi # + np.random.uniform(low=-np.pi/4, high=np.pi/4)
         else:
-            robot_position = np.array([np.random.uniform(low=-6.5, high=-5.5), np.random.uniform(low=-2, high=2)])
+            robot_position = np.array([np.random.uniform(low=-6, high=-5), np.random.uniform(low=-4, high=4)])
             robot_heading = np.pi #+ np.random.uniform(low=-np.pi/4, high=np.pi/4)
         self.robot_state = np.array([robot_position[0], robot_position[1], robot_heading], dtype=np.float32)
 
