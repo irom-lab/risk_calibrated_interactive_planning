@@ -8,6 +8,8 @@ import time
 import torch
 import argparse
 
+from utils.general_utils import str2bool
+
 from gymnasium.envs.registration import register
 from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv, VecFrameStack
 from stable_baselines3.common.monitor import Monitor
@@ -27,41 +29,40 @@ import wandb
 from wandb_osh.hooks import TriggerWandbSyncHook  # <-- New!
 
 def run():
-    parser = argparse.ArgumentParser(
-        prog='BulletHallwayEnv')
-
+    parser = argparse.ArgumentParser(prog='BulletHallwayEnv')
+    parser.add_argument('--log-history', type=str2bool, default=False)
+    parser.add_argument('--load-model', type=str2bool, default=False)
+    parser.add_argument('--render', type=str2bool, default=False)
+    parser.add_argument('--num-envs', type=int, default=1)
     trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
     node = platform.node()
     if node == 'mae-majumdar-lab6' or node == "jlidard":
         home = expanduser("~")   # lab desktop
-        num_cpu = 1
         max_steps = 100
-        render = True
         debug = False
         online = False
-        load_model = True
+
     elif node == 'mae-ani-lambda':
         home = expanduser("~")   # della fast IO file system
-        num_cpu = 256
         max_steps = 200
-        render = False
         debug = False
         online = True
-        load_model = False
     else:
         home = '/scratch/gpfs/jlidard/'  # della fast IO file system
-        num_cpu = 128
         max_steps = 300
-        render = False
         debug = False
         online = False
-        load_model = False
 
-    log_history = False
+    args = vars(parser.parse_args())
+    render = args["render"]
+    num_cpu = args["num_envs"]
+    log_history = args["log_history"]
+    load_model = args["load_model"]
+    load_path = args["model_load_path"]
 
     if load_model:
-        load_path = '/home/jlidard/PredictiveRL/models/1702407888/model_best_225'
+        load_path = '/home/jlidard/PredictiveRL/models/1702419335/epoch_300'
     else:
         load_path = None
 
@@ -109,9 +110,9 @@ def run():
         )
 
     print('Training Policy.')
-    policy_kwargs = dict(net_arch=dict(pi=[256, 128, 64], vf=[256, 128, 64]))
+    policy_kwargs = dict(net_arch=dict(pi=[512, 512, 512], vf=[512, 512, 512]))
     model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir,
-                n_steps=max_steps, n_epochs=3, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs,
+                n_steps=max_steps, n_epochs=1, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs,
                 device=device)
     if load_path is not None:
         model = PPO.load(load_path, env=env)

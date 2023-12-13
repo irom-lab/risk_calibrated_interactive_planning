@@ -737,8 +737,9 @@ class BulletHallwayEnv(gym.Env):
                            "human_intent": all_intent})
         now = datetime.now()
         dt_string = now.strftime("%d_%m_%Y_%H_%M_%S")
-        os.makedirs(f"{self.df_savepath}/rollouts/", exist_ok=True)
-        df.to_csv(f"{self.df_savepath}/rollouts/rollout_{dt_string}.csv")
+        os.makedirs( os.path.join(self.df_savepath, "rollouts"), exist_ok=True)
+        save_path = os.path.join(self.df_savepath, "rollouts", f"rollout_{dt_string}.csv")
+        df.to_csv(save_path)
         self.reset_state_history()
 
     def append_state_history(self):
