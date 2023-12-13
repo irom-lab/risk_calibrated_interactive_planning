@@ -35,15 +35,15 @@ def run():
     node = platform.node()
     if node == 'mae-majumdar-lab6' or node == "jlidard":
         home = expanduser("~")   # lab desktop
-        num_cpu = 32
+        num_cpu = 1
         max_steps = 100
-        render = False
+        render = True
         debug = False
         online = False
         load_model = True
     elif node == 'mae-ani-lambda':
         home = expanduser("~")   # della fast IO file system
-        num_cpu = 128
+        num_cpu = 256
         max_steps = 200
         render = False
         debug = False
@@ -77,9 +77,9 @@ def run():
 
     episodes = 1
     if log_history:
-        learn_steps = 100
-    else:
         learn_steps = 25000
+    else:
+        learn_steps = 100000
     save_freq = 100000
     n_iters=100000
     video_length=max_steps
@@ -111,7 +111,7 @@ def run():
     print('Training Policy.')
     policy_kwargs = dict(net_arch=dict(pi=[256, 128, 64], vf=[256, 128, 64]))
     model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir,
-                n_steps=max_steps, n_epochs=10, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs,
+                n_steps=max_steps, n_epochs=3, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs,
                 device=device)
     if load_path is not None:
         model = PPO.load(load_path, env=env)

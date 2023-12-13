@@ -10,6 +10,7 @@ import random
 import time
 from enum import IntEnum
 from collections import deque
+from datetime import datetime
 
 import pybullet
 from . import racecar
@@ -313,12 +314,12 @@ class BulletHallwayEnv(gym.Env):
         if self.human_state[0] >= 0:
             intent_bonus += (self.prev_human_hallway_dist - human_hallway_dist).item()
         if self.robot_state[0] <= 0:
-            intent_bonus += (self.prev_robot_hallway_dist - robot_best_hallway_dist).item()
+            intent_bonus += 0 # (self.prev_robot_hallway_dist - robot_best_hallway_dist).item()
         self.prev_robot_hallway_dist = robot_best_hallway_dist
         self.prev_human_hallway_dist = human_hallway_dist
 
         # Compute reward
-        wrong_hallway_either = wrong_hallway # or (-1 <= self.robot_state[0] <= 1 and i_best_robot != self.robot_best_hallway_initial)
+        wrong_hallway_either = wrong_hallway or (self.robot_state[0] <= -1 and i_best_robot != self.robot_best_hallway_initial)
         self.compute_reward(wrong_hallway_either, intent_bonus)
         self.prev_dist_robot = self.dist_robot
         self.prev_dist_human = self.dist_human
@@ -396,7 +397,7 @@ class BulletHallwayEnv(gym.Env):
         collision_penalty = 0
         if violated_dist:
             self.done = False
-            collision_penalty += 0.001
+            collision_penalty += 0.01
 
         if collision_with_human(self.robot_state, self.human_state):
             self.done = True
@@ -474,6 +475,7 @@ class BulletHallwayEnv(gym.Env):
             intent = self.intent_seed
 
         # if self.debug:
+        intent = 2
         self.intent = HumanIntent(intent)
 
 
@@ -492,7 +494,7 @@ class BulletHallwayEnv(gym.Env):
             human_position = np.array([6.5, 0])
             human_heading = np.pi + np.pi #np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
         else:
-            human_position = np.array([np.random.uniform(low=5, high=6), np.random.uniform(low=-4, high=4)])
+            human_position = np.array([np.random.uniform(low=5, high=5), np.random.uniform(low=-3, high=3)])
             human_heading = 0  #+ np.random.uniform(low=3*np.pi/4, high=5*np.pi/4)
         self.human_state = np.array([human_position[0], human_position[1], human_heading], dtype=np.float32)
 
@@ -500,7 +502,7 @@ class BulletHallwayEnv(gym.Env):
             robot_position = np.array([-6.5, 0])
             robot_heading = np.pi # + np.random.uniform(low=-np.pi/4, high=np.pi/4)
         else:
-            robot_position = np.array([np.random.uniform(low=-6, high=-5), np.random.uniform(low=-4, high=4)])
+            robot_position = np.array([np.random.uniform(low=-5, high=-5), np.random.uniform(low=-3, high=3)])
             robot_heading = np.pi #+ np.random.uniform(low=-np.pi/4, high=np.pi/4)
         self.robot_state = np.array([robot_position[0], robot_position[1], robot_heading], dtype=np.float32)
 
@@ -733,8 +735,10 @@ class BulletHallwayEnv(gym.Env):
                            "human_state_y": all_human_state[:, 1],
                            "human_state_heading": all_human_state[:, 2],
                            "human_intent": all_intent})
+        now = datetime.now()
+        dt_string = now.strftime("%d_%m_%Y_%H_%M_%S")
         os.makedirs(f"{self.df_savepath}/rollouts/", exist_ok=True)
-        df.to_csv(f"{self.df_savepath}/rollouts/rollout_{self.rollout_counter}.csv")
+        df.to_csv(f"{self.df_savepath}/rollouts/rollout_{dt_string}.csv")
         self.reset_state_history()
 
     def append_state_history(self):

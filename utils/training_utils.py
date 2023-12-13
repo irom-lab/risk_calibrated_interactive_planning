@@ -1,9 +1,13 @@
 import torch
 from utils.visualization_utils import plot_pred
+from tqdm import tqdm
 def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=True):
     loss = 0
+    ce_cost = 0
+    mse_cost = 0
     cnt = 0
-    for batch_dict in dataloader:
+    dataloader_tqdm = tqdm(dataloader)
+    for batch_dict in dataloader_tqdm:
         cnt += 1
 
         if train:
@@ -33,15 +37,25 @@ def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=Tru
         loss = lowest_mse_loss + ce_loss
         loss = loss.mean()  # Finally, aggregate over batch
 
+        ce_cost += ce_loss.detach().mean()
+        mse_cost += lowest_mse_loss.detach().mean()
+
         if train:
             loss.backward()
             optimizer.step()
         # print(loss.item())
         loss += loss.item()
 
+    loss /= cnt
+    ce_cost /= cnt
+    mse_cost /= cnt
+
     img = None
     if not train:
         # get an example image for the last batch
         img = plot_pred(batch_X, robot_state_gt, batch_y, batch_z, y_pred, y_weight)
 
-    return loss, img
+    stats_dict = {"ce_cost": ce_cost,
+                  "mse_cost": mse_cost}
+
+    return loss, img, stats_dict

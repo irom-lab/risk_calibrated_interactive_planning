@@ -49,12 +49,12 @@ class IntentFormerDecoder(torch.nn.Module):
 
         B, nseg, hidden_dim = input.shape
 
-        x = input
+        memory = input
+        anchor_encoding = self.anchor_encoder_mlp(self.traj_anchors)
+        tgt = anchor_encoding[None].repeat(B, 1, 1)
         for layer in self.transformer_decoder_layers:
-            anchor_encoding = self.anchor_encoder_mlp(self.traj_anchors)
-            tgt = anchor_encoding[None].repeat(B, 1, 1)
-            memory = x
             x = layer(tgt, memory)
+            tgt = x
 
         output_traj = self.traj_decoder_mlp(x)
         output_traj = output_traj.reshape(B, self.num_motion_modes, self.future_horizon, self.out_coord_dim)

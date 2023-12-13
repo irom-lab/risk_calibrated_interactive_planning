@@ -33,13 +33,13 @@ class IntentPredictionDataset(Dataset):
             file_path = os.path.join(root_dir, subdir)
             if not os.path.isfile(file_path):
                 continue
-            self.traj_dict[subdir] = pd.read_csv(file_path)
+            self.traj_dict[subdir] = pd.read_csv(file_path,on_bad_lines='skip')
             self.file_names[i] = subdir
             i += 1
         self.root_dir = root_dir
 
     def __len__(self):
-        return len(self.traj_dict.keys())
+        return len(list(self.traj_dict.keys()))
 
     def __getitem__(self, idx):
 
