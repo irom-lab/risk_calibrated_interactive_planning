@@ -33,6 +33,7 @@ def run():
     parser.add_argument('--log-history', type=str2bool, default=False)
     parser.add_argument('--load-model', type=str2bool, default=False)
     parser.add_argument('--render', type=str2bool, default=False)
+    parser.add_argument('--model-load-path', type=str, default=None)
     parser.add_argument('--num-envs', type=int, default=1)
     trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
