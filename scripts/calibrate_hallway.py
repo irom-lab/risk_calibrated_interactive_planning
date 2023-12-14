@@ -78,48 +78,7 @@ def plot_risk_figures(prediction_set_size, is_bullet=False):
         name = 'bullet_hallway_set_size.png'
     plt.savefig(name)
 
-# test_dict = {0: [0, 1, 2], 0.1: [1, 1, 2, 3, 5], 0.2: [1, 5, 7, 9, 11], 0.5: [0, 11], 0.10: [66]}
-# plot_risk_figures(test_dict, is_bullet=True)
-
-
-
-render = False
-debug = True
-rgb_observation = False
-online = False
-# 'if __name__' Necessary for multithreading
-if __name__ == ("__main__"):
-
-    episodes = 1
-    num_cpu = 1  # Number of processes to use
-    max_steps = 200
-    learn_steps = 12800
-    save_freq = 100000
-    n_iters=1000
-    video_length=200
-    timesteps = max_steps
-
-    # Create the vectorized environment
-    if use_bullet:
-        env = BulletHallwayEnv(render=render, debug=debug, time_limit=max_steps, rgb_observation=rgb_observation,show_intent=False)
-    else:
-        env = HallwayEnv(render=render, debug=debug, time_limit=max_steps, rgb_observation=rgb_observation ,show_intent=False)
-
-    # if online:
-    #     wandb.init(
-    #         project="conformal_rl",
-    #     )
-    # else:
-    #     wandb.init(
-    #         project="conformal_rl",
-    #         mode="offline"
-    #     )
-
-    print('Training Policy.')
-    policy_kwargs = dict(net_arch=dict(pi=[64, 64], vf=[64, 64]))
-    # model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir,
-    #             n_steps=max_steps, n_epochs=2, learning_rate=1e-6, gamma=0.999, )
-    model = PPO.load(loaddir, env=env)
+def calibrate_hallway(env, model, n_cal=100, prediction_step_interval=10, image_obs=False):
 
 
     num_calibration = 1
@@ -130,16 +89,15 @@ if __name__ == ("__main__"):
         intent = np.random.choice(5)
         env.seed_intent(HumanIntent(intent))
         total_reward = 0
-        episode_length_actual = video_length//4+5 #np.random.randint(low=video_length/10, high=video_length/5)
         observation_list = []
+        done = False
+        i = 0
         # rollout to a random timepoint
-        for i in range(episode_length_actual):
+        while not done:
             action, _states = model.predict(obs, deterministic=True)
             obs, rewards, done, trunc, info = env.step(action)
             total_reward += rewards
-            if done:
-                continue
-            if i % 10 == 0:
+            if i % 10 == 0 and image_obs:
                 print(f"Total reward: {total_reward}")
                 if use_bullet:
                     img_obs = env.render()
@@ -147,6 +105,7 @@ if __name__ == ("__main__"):
                     img_obs = env.render(resolution_scale=2)
                 observation = img_obs
                 observation_list.append(observation)
+            i += 1
         context = np.stack(observation_list, 0)
         context_list.append(context)
         label_list.append(intent)  #TODO(justin.lidard): add dynamic intents

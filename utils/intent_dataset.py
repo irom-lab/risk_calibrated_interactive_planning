@@ -33,7 +33,7 @@ class IntentPredictionDataset(Dataset):
             file_path = os.path.join(root_dir, subdir)
             if not os.path.isfile(file_path):
                 continue
-            self.traj_dict[subdir] = pd.read_csv(file_path,on_bad_lines='skip')
+            self.traj_dict[subdir] = pd.read_csv(file_path, on_bad_lines='skip')
             self.file_names[i] = subdir
             i += 1
         self.root_dir = root_dir
@@ -47,9 +47,8 @@ class IntentPredictionDataset(Dataset):
         rollout_data = self.traj_dict[filename]
 
         traj_len = len(rollout_data.index)
-        frac_stop = np.random.randint(10) + 3
-        Tstop = traj_len // frac_stop
-
+        traj_stop = np.random.randint(low=10, high=traj_len-50)
+        Tstop = traj_stop
         state_history = torch.Tensor(rollout_data.iloc[:Tstop, :-1].values).cuda()
         robot_state_gt = torch.Tensor(rollout_data.iloc[Tstop:Tstop+self.max_pred, 4:6].values).cuda()
         human_state_gt = torch.Tensor(rollout_data.iloc[Tstop:Tstop+self.max_pred, 1:3].values).cuda()

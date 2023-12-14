@@ -32,6 +32,7 @@ def plot_pred(batch_X, robot_state_gt, human_state_gt, batch_z, y_pred, z_pred, 
 
     for mode in range(y_pred.shape[1]):
         plt.scatter(y_pred[batch, mode, :, 0], y_pred[batch, mode, :, 1], alpha=z_pred[batch, mode].item(), c='b')
+    plt.axis((-6, 6, -4.5, 4.5))
 
     img = get_img_from_fig(fig)
     img = PIL.Image.fromarray(img)

@@ -2,7 +2,7 @@ import torch
 from utils.visualization_utils import plot_pred
 from tqdm import tqdm
 def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=True):
-    loss = 0
+    total_cost = 0
     ce_cost = 0
     mse_cost = 0
     cnt = 0
@@ -11,7 +11,10 @@ def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=Tru
         cnt += 1
 
         if train:
+            my_model.train()
             optimizer.zero_grad()
+        else:
+            my_model.eval()
         batch_X = batch_dict["state_history"]
         batch_y = batch_dict["human_state_gt"]
         robot_state_gt = batch_dict["robot_state_gt"]
@@ -40,13 +43,15 @@ def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=Tru
         ce_cost += ce_loss.detach().mean()
         mse_cost += lowest_mse_loss.detach().mean()
 
+        total_cost += loss.detach()
+
         if train:
             loss.backward()
             optimizer.step()
         # print(loss.item())
         loss += loss.item()
 
-    loss /= cnt
+    total_cost /= cnt
     ce_cost /= cnt
     mse_cost /= cnt
 

@@ -24,7 +24,7 @@ mse_loss = torch.nn.MSELoss(reduction='none')
 CE_loss = torch.nn.CrossEntropyLoss(reduction='none')
 
 home = expanduser("~")
-rollout_num = 1702407888
+rollout_num = 1702585652
 logdir = os.path.join(home, f"PredictiveRL/models/predictor_{rollout_num}/")
 csv_dir = f"/home/jlidard/PredictiveRL/logs/{rollout_num}/rollouts"
 
@@ -60,11 +60,11 @@ diff_order = 1
 hidden_size = hdim
 num_layers = nlayer
 
-train_set_size=150
+train_set_size=5000
 train_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=True, max_pred=future_horizon)
 test_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False, max_pred=future_horizon)
 
-batch_size = 32
+batch_size = 64
 train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
 test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
 
@@ -72,7 +72,7 @@ my_model = IntentFormer(hdim, num_segments, future_horizon, params=params).cuda(
 # my_model = TransformerModel(len(input_cols), input_length, output_length=output_len)
 optimizer = optim.Adam(my_model.parameters(), lr=1e-4)
 
-vis_interval = 100
+vis_interval = 5
 num_epochs = 100000
 epochs = []
 train_losses = []
