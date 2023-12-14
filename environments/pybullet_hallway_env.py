@@ -301,7 +301,6 @@ class BulletHallwayEnv(gym.Env):
             self.p.changeVisualShape(ba, -1, rgbaColor=[0, 1, 0, 0.5])
         self.tid = []
         self.rollout_counter = 0
-        self.reset_state_history()
 
     def step(self, action):
 
@@ -335,8 +334,10 @@ class BulletHallwayEnv(gym.Env):
 
         if self.log_history:
             self.append_state_history()
-            if self.done:
+            if self.truncated:
                 self.save_state_history()
+            elif self.done and not self.truncated:
+                self.reset_state_history()
 
         if self.display_render:
             if self.tid is not None:
@@ -610,6 +611,7 @@ class BulletHallwayEnv(gym.Env):
 
 
         if self.log_history:
+            self.reset_state_history()
             self.append_state_history()
             if self.done:
                 self.save_state_history()
@@ -754,8 +756,9 @@ class BulletHallwayEnv(gym.Env):
                            "human_state_y": all_human_state[:, 1],
                            "human_state_heading": all_human_state[:, 2],
                            "human_intent": all_intent})
-        now = datetime.now()
-        dt_string = now.strftime("%d_%m_%Y_%H_%M_%S")
+        # now = datetime.now()
+        # dt_string = now.strftime("%d_%m_%Y_%H_%M_%S")
+        dt_string = time.time_ns()
         os.makedirs( os.path.join(self.df_savepath, "rollouts"), exist_ok=True)
         save_path = os.path.join(self.df_savepath, "rollouts", f"rollout_{dt_string}.csv")
         df.to_csv(save_path)

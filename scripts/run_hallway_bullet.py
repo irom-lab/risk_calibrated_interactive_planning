@@ -19,6 +19,7 @@ from stable_baselines3.common.utils import obs_as_tensor, safe_mean
 from environments.save_best_training_reward_callback import SaveOnBestTrainingRewardCallback
 
 from stable_baselines3.common.vec_env.vec_video_recorder import VecVideoRecorder
+from stable_baselines3.common.evaluation import evaluate_policy
 
 from record_video import record_video
 import platform
@@ -39,6 +40,7 @@ def run():
     parser.add_argument('--num-envs', type=int, default=1)
     parser.add_argument('--use-discrete-action-space', type=str2bool, default=True)
     parser.add_argument('--learn-steps', type=int, default=100000, help="learn steps per epoch")
+    parser.add_argument('--eval-episodes', type=int, default=10000, help="num rollouts for traj collection")
     trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
     node = platform.node()
@@ -69,6 +71,7 @@ def run():
     learn_steps = args["learn_steps"]
     n_epochs = args["n_epochs"]
     hidden_dim = args["network_hidden_dim"]
+    n_eval_episodes = args["eval_episodes"]
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -127,7 +130,10 @@ def run():
     print("Starting training...")
     best_mean_reward = -np.Inf
     for iter in range(n_iters):
-        model.learn(total_timesteps=learn_steps, tb_log_name=f"PPO", callback=callback)
+        if log_history:
+            model.learn(total_timesteps=learn_steps, tb_log_name=f"PPO", callback=callback)
+        else:
+            evaluate_policy(model=model, env=env, n_eval_episodes=n_eval_episodes)
         ep_info_buffer = model.ep_info_buffer
         training_dict = dict(model.logger.__dict__["name_to_value"])
         ep_mean_reward = safe_mean([ep_info["r"] for ep_info in ep_info_buffer])
