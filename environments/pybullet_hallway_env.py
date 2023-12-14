@@ -163,8 +163,9 @@ class BulletHallwayEnv(gym.Env):
 
     def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=1, deterministic_intent=None,
                  debug=False, render_mode="rgb_array", time_limit=100, rgb_observation=False,
-                 urdfRoot=pybullet_data.getDataPath(), show_intent=True, history_log_path=None):
+                 urdfRoot=pybullet_data.getDataPath(), show_intent=True, history_log_path=None, discrete_action=True):
         super(BulletHallwayEnv, self).__init__()
+        self.discrete_action_space = discrete_action
         self.show_intent = show_intent
         self.log_history = (history_log_path is not None)
         self.df_savepath = history_log_path
@@ -197,8 +198,11 @@ class BulletHallwayEnv(gym.Env):
         num_latent_vars = len(HumanIntent)
         self.num_latent_vars = num_latent_vars
         self.max_turning_rate = max_turning_rate
-        self.action_space = spaces.Box(low=-max_turning_rate, high=max_turning_rate, shape=(4,))
-        self.action_space = spaces.MultiDiscrete(nvec=np.array([3, 3]))
+        if self.discrete_action_space:
+            self.action_space = spaces.MultiDiscrete(nvec=np.array([3, 3]))
+        else:
+            self.action_space = spaces.Box(low=-max_turning_rate, high=max_turning_rate, shape=(4,))
+
         # self.action_space = spaces.MultiDiscrete(nvec=[3, 3])
         self.obs_seq_len = obs_seq_len
         self.state_dim = state_dim
@@ -221,6 +225,7 @@ class BulletHallwayEnv(gym.Env):
 
         self.display_render = render
         self.done = False
+        self.truncated = False
         self.debug = debug
         self.render_mode = render_mode
         self.intent_seed = None
@@ -326,7 +331,6 @@ class BulletHallwayEnv(gym.Env):
         self.prev_dist_human = self.dist_human
 
         info = {}
-        truncated = False
         observation = self.compute_observation(human_hallway, robot_hallway)
 
         if self.log_history:
@@ -342,9 +346,11 @@ class BulletHallwayEnv(gym.Env):
             self.tid.append(self.p.addUserDebugText(f"Reward: {self.cumulative_reward}", [0, 0, 2], textSize=5, textColorRGB=[0, 0, 0]))
             self.tid.append(self.p.addUserDebugText(f"Robot Target: {self.robot_best_hallway_initial}", [0, 0, 1], textSize=5, textColorRGB=[0, 0, 0]))
 
-        return observation, self.reward, self.done, truncated, info
+        return observation, self.reward, self.done, self.truncated, info
 
     def map_discrete_to_continuous(self, action):
+        if not self.discrete_action_space:
+            return action
         new_action = np.zeros_like(action)
         for i, a in enumerate(action):
             if a == 0:
@@ -425,7 +431,7 @@ class BulletHallwayEnv(gym.Env):
 
         if self.timesteps >= self.time_limit:
             self.done = True
-            truncated = True
+            self.truncated = True
         
         self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
         self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
@@ -592,6 +598,7 @@ class BulletHallwayEnv(gym.Env):
         self.prev_dist_human = self.dist_human
 
         self.done = False
+        self.truncated = False
 
         human_hallway_dist, human_hallway, wrong_hallway = self.compute_dist_to_hallways(is_human=True)
         robot_best_hallway_dist, robot_hallway, i_best_robot = self.compute_dist_to_hallways(is_human=False)

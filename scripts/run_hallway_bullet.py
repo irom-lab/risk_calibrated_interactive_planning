@@ -30,11 +30,15 @@ from wandb_osh.hooks import TriggerWandbSyncHook  # <-- New!
 
 def run():
     parser = argparse.ArgumentParser(prog='BulletHallwayEnv')
+    parser.add_argument('--network-hidden-dim', type=int, default=64)
+    parser.add_argument('--n-epochs', type=int, default=10)
     parser.add_argument('--log-history', type=str2bool, default=False)
     parser.add_argument('--load-model', type=str2bool, default=False)
     parser.add_argument('--render', type=str2bool, default=False)
     parser.add_argument('--model-load-path', type=str, default=None)
     parser.add_argument('--num-envs', type=int, default=1)
+    parser.add_argument('--use-discrete-action-space', type=str2bool, default=True)
+    parser.add_argument('--learn-steps', type=int, default=100000, help="learn steps per epoch")
     trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
     node = platform.node()
@@ -60,12 +64,11 @@ def run():
     num_cpu = args["num_envs"]
     log_history = args["log_history"]
     load_model = args["load_model"]
-    load_path = args["model_load_path"]
-
-    if load_model:
-        load_path = '/home/jlidard/PredictiveRL/models/1702419335/epoch_300'
-    else:
-        load_path = None
+    load_path = args["model_load_path"] if load_model else None
+    use_discrete_action = args["use_discrete_action_space"]
+    learn_steps = args["learn_steps"]
+    n_epochs = args["n_epochs"]
+    hidden_dim = args["network_hidden_dim"]
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -78,14 +81,9 @@ def run():
     rgb_observation = False
 
     episodes = 1
-    if log_history:
-        learn_steps = 25000
-    else:
-        learn_steps = 100000
     save_freq = 100000
-    n_iters=100000
-    video_length=max_steps
-    timesteps = max_steps
+    n_iters = 100000
+    video_length = max_steps
 
     # Create the vectorized environment
     env = SubprocVecEnv([make_bullet_env(i,
@@ -93,10 +91,15 @@ def run():
                                          debug=debug,
                                          time_limit=max_steps,
                                          rgb_observation=rgb_observation,
-                                         history_log_path=history_log_path)
+                                         history_log_path=history_log_path,
+                                         discrete_action=use_discrete_action)
                          for i in range(num_cpu)])
     env = VecMonitor(env, logdir + "log")
-    videnv = BulletHallwayEnv(render=render, debug=debug, time_limit=max_steps, rgb_observation=rgb_observation)
+    videnv = BulletHallwayEnv(render=render,
+                              debug=debug,
+                              time_limit=max_steps,
+                              rgb_observation=rgb_observation,
+                              discrete_action=use_discrete_action)
     videnv = DummyVecEnv([lambda: videnv])
     videnv = VecVideoRecorder(videnv, video_folder=logdir, record_video_trigger=lambda x: True, video_length=video_length)
 
@@ -111,9 +114,9 @@ def run():
         )
 
     print('Training Policy.')
-    policy_kwargs = dict(net_arch=dict(pi=[512, 512, 512], vf=[512, 512, 512]))
+    policy_kwargs = dict(net_arch=dict(pi=[hidden_dim, hidden_dim, hidden_dim], vf=[hidden_dim, hidden_dim, hidden_dim]))
     model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir,
-                n_steps=max_steps, n_epochs=1, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs,
+                n_steps=max_steps, n_epochs=n_epochs, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs,
                 device=device)
     if load_path is not None:
         model = PPO.load(load_path, env=env)
