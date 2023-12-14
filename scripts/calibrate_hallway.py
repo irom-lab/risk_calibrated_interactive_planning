@@ -33,15 +33,15 @@ logdir = os.path.join(home, f"PredictiveRL/conformal_outputs/{int(time.time())}/
 dataframe_path = os.path.join(home, f"PredictiveRL/conformal_outputs/{int(time.time())}.csv")
 
 
-def plot_figures(non_conformity_score, is_bullet=False):
-    epsilon = 0.15
-    num_calibration = 500  # fake!
+def plot_figures(non_conformity_score, is_bullet=False, epsilon = 0.15, num_calibration=500, save_fig=False):
+
     q_level = np.ceil((num_calibration + 1) * (1 - epsilon)) / num_calibration
     qhat = np.quantile(non_conformity_score, q_level, method='higher')
     print('Quantile value qhat:', qhat)
     print('')
 
     # plot histogram and quantile
+    plt.figure()
     plt.figure(figsize=(6, 2))
     plt.hist(non_conformity_score, bins=30, edgecolor='k', linewidth=1)
     plt.axvline(
@@ -56,11 +56,12 @@ def plot_figures(non_conformity_score, is_bullet=False):
         name = 'hallway_non_conformity.png'
     else:
         name = 'bullet_hallway_non_conformity.png'
-    plt.savefig(name)
-    print('')
-    print('A good predictor should have low non-comformity scores, concentrated at the left side of the figure')
+    if save_fig:
+        plt.savefig(name)
+    return plt.gcf()
 
-def plot_risk_figures(prediction_set_size, is_bullet=False):
+
+def plot_risk_figures(prediction_set_size, is_bullet=False, save_fig=False):
 
     # plot histogram and quantile
     x_list = list(prediction_set_size.keys())
@@ -76,7 +77,12 @@ def plot_risk_figures(prediction_set_size, is_bullet=False):
         name = 'hallway_set_size.png'
     else:
         name = 'bullet_hallway_set_size.png'
-    plt.savefig(name)
+
+    if save_fig:
+        plt.savefig(name)
+
+    return plt.gcf()
+
 
 def calibrate_hallway(env, model, n_cal=100, prediction_step_interval=10, image_obs=False):
 

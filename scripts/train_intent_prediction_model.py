@@ -64,7 +64,7 @@ train_set_size=5000
 train_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=True, max_pred=future_horizon)
 test_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False, max_pred=future_horizon)
 
-batch_size = 64
+batch_size = 32
 train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
 test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
 

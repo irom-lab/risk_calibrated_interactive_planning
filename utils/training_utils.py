@@ -65,11 +65,34 @@ def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=Tru
 
     return loss, img, stats_dict
 
-def calibrate_predictor():
+def calibrate_predictor(predict_step_interval=10):
 
 
     for lam in lambdas:
         prediction_set_size[lam] = []
+
+    cnt = 0
+    dataloader_tqdm = tqdm(dataloader)
+    for batch_dict in dataloader_tqdm:
+        cnt += 1
+
+        model.eval()
+        batch_X = batch_dict["state_history"].cuda()
+        batch_y = batch_dict["human_state_gt"].cuda()
+        robot_state_gt = batch_dict["robot_state_gt"]
+        batch_z = batch_dict["intent_gt"][:, -1].cuda()
+
+        traj_len = batch_y.shape[1]
+        traj_windows = torch.arange(10, traj_len, predict_step_interval)
+
+        for endpoint in traj_windows:
+            input = batch_z[:, :endpoint]
+
+
+        y_pred, y_weight = my_model(batch_X)
+        y_weight = y_weight.softmax(dim=-1)
+
+
     image_path = f'/home/jlidard/PredictiveRL/language_img/'
     for index, row in dataset.iterrows():
         context = row[0]
