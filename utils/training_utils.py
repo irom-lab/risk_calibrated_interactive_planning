@@ -73,6 +73,7 @@ def calibrate_predictor(predict_step_interval=10):
 
     cnt = 0
     dataloader_tqdm = tqdm(dataloader)
+    non_conformity_score = torch.zeros((len(dataloader), ))
     for batch_dict in dataloader_tqdm:
         cnt += 1
 
@@ -86,11 +87,21 @@ def calibrate_predictor(predict_step_interval=10):
         traj_windows = torch.arange(10, traj_len, predict_step_interval)
 
         for endpoint in traj_windows:
-            input = batch_z[:, :endpoint]
+            input = batch_X[:, :endpoint]
+            true_intent = batch_z[:, endpoint-1]
+
+            y_pred, y_weight = my_model(batch_X)
+            probs = y_weight.softmax(dim=-1)
+
+            true_label_smx = probs[label]
+            # extract probs
+            non_conformity_score.append(1 - true_label_smx)
 
 
-        y_pred, y_weight = my_model(batch_X)
-        y_weight = y_weight.softmax(dim=-1)
+        for lam in lambdas:
+            pred_set = probs > lam
+            risk = 1 if pred_set.sum() > 1 else 0
+            prediction_set_size[lam].append(sum(pred_set))
 
 
     image_path = f'/home/jlidard/PredictiveRL/language_img/'
@@ -104,13 +115,7 @@ def calibrate_predictor(predict_step_interval=10):
         response = vlm(prompt=prompt, image_path=image_path) # response_str = response.json()["choices"][0]["message"]["content"]
         probs = hallway_parse_response(response)
         probs = probs/probs.sum()
-        true_label_smx = probs[label]
-        # extract probs
-        non_conformity_score.append(1 - true_label_smx)
-        for lam in lambdas:
-            pred_set = probs > lam
-            risk = 1 if pred_set.sum() > 1 else 0
-            prediction_set_size[lam].append(sum(pred_set))
+
 
         if index % 25 == 0:
             print(f"Done {index} of {num_calibration}.")
