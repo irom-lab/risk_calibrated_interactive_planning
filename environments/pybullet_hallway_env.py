@@ -344,13 +344,26 @@ class BulletHallwayEnv(gym.Env):
 
         return observation, self.reward, self.done, truncated, info
 
+    def map_discrete_to_continuous(self, action):
+        new_action = np.zeros_like(action)
+        for i, a in enumerate(action):
+            if a == 0:
+                new_a = 0
+            elif a == 1:
+                new_a = 1
+            else:
+                new_a = -1
+            new_action[i] = new_a
+        return new_action
+
     def compute_state_transition(self, action):
         action_scale = 1
         action_offset = -2
         agent_0_vel = action_offset  #+action[2]
         agent_1_vel = action_offset  #+action[3]
-        robot_action = np.array([agent_0_vel, action_scale*action[0]])
-        human_action = np.array([agent_1_vel, action_scale*action[1]])
+        mapped_action = self.map_discrete_to_continuous(action)
+        robot_action = np.array([agent_0_vel, action_scale*mapped_action[0]])
+        human_action = np.array([agent_1_vel, action_scale*mapped_action[1]])
         same_action_time = 5
         for _ in range(same_action_time):
             self.robot.applyAction(robot_action)
