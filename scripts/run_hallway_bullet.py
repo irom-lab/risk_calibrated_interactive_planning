@@ -131,9 +131,9 @@ def run():
     best_mean_reward = -np.Inf
     for iter in range(n_iters):
         if log_history:
-            model.learn(total_timesteps=learn_steps, tb_log_name=f"PPO", callback=callback)
-        else:
             evaluate_policy(model=model, env=env, n_eval_episodes=n_eval_episodes)
+        else:
+            model.learn(total_timesteps=learn_steps, tb_log_name=f"PPO", callback=callback)
         ep_info_buffer = model.ep_info_buffer
         training_dict = dict(model.logger.__dict__["name_to_value"])
         ep_mean_reward = safe_mean([ep_info["r"] for ep_info in ep_info_buffer])

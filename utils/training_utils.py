@@ -64,3 +64,30 @@ def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=Tru
                   "mse_cost": mse_cost}
 
     return loss, img, stats_dict
+
+def calibrate_predictor():
+
+
+    for lam in lambdas:
+        prediction_set_size[lam] = []
+    image_path = f'/home/jlidard/PredictiveRL/language_img/'
+    for index, row in dataset.iterrows():
+        context = row[0]
+        label = row[1]
+        for k in range(context.shape[0]):
+            save_path = f'/home/jlidard/PredictiveRL/language_img/hallway_tmp{k}.png'
+            img = Image.fromarray(context[k])
+            img.save(save_path)
+        response = vlm(prompt=prompt, image_path=image_path) # response_str = response.json()["choices"][0]["message"]["content"]
+        probs = hallway_parse_response(response)
+        probs = probs/probs.sum()
+        true_label_smx = probs[label]
+        # extract probs
+        non_conformity_score.append(1 - true_label_smx)
+        for lam in lambdas:
+            pred_set = probs > lam
+            risk = 1 if pred_set.sum() > 1 else 0
+            prediction_set_size[lam].append(sum(pred_set))
+
+        if index % 25 == 0:
+            print(f"Done {index} of {num_calibration}.")

@@ -77,6 +77,7 @@ num_epochs = 100000
 epochs = []
 train_losses = []
 test_losses = []
+lambda_values = np.arange(0, 1, 0.05)
 for epoch in range(num_epochs):
     data_dict = {}
     my_model.train()
@@ -95,6 +96,12 @@ for epoch in range(num_epochs):
         for k, v in val_stats.items():
             data_dict["val_" + k] = v
 
+    if epoch % calibration_interval == 0:
+        epoch_cost_val, viz_img, val_stats = calibrate_predictor(test_loader, my_model, lambda_values)
+        data_dict["val_loss"] = calibration_cost
+        data_dict["example_vis"] = [wandb.Image(viz_img)]
+        for k, v in val_stats.items():
+            data_dict["val_" + k] = v
 
     epochs.append(epoch)
     train_losses.append(epoch_cost_train)
