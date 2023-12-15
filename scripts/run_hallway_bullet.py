@@ -42,6 +42,7 @@ def run():
     parser.add_argument('--use-discrete-action-space', type=str2bool, default=True)
     parser.add_argument('--learn-steps', type=int, default=100000, help="learn steps per epoch")
     parser.add_argument('--eval-episodes', type=int, default=10000, help="num rollouts for traj collection")
+    parser.add_argument('--batch-size', type=int, default=2048)
     trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
     node = platform.node()
@@ -71,6 +72,7 @@ def run():
     n_epochs = args["n_epochs"]
     hidden_dim = args["network_hidden_dim"]
     n_eval_episodes = args["eval_episodes"]
+    batch_size = args["batch_size"]
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -115,7 +117,6 @@ def run():
             mode="offline"
         )
 
-    batch_size = max_steps*num_cpu
     print('Training Policy.')
     policy_kwargs = dict(net_arch=dict(pi=[hidden_dim, hidden_dim, hidden_dim], vf=[hidden_dim, hidden_dim, hidden_dim]))
     model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir,

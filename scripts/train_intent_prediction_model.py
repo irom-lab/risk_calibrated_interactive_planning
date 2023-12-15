@@ -74,13 +74,15 @@ my_model = IntentFormer(hdim, num_segments, future_horizon, params=params).cuda(
 # my_model = TransformerModel(len(input_cols), input_length, output_length=output_len)
 optimizer = optim.Adam(my_model.parameters(), lr=1e-4)
 
+num_thresh = 100
+lambda_interval = 1 // num_thresh
 vis_interval = 5
 num_epochs = 100000
 num_cal = test_ds.__len__()
 epochs = []
 train_losses = []
 test_losses = []
-lambda_values = np.arange(0, 1, 0.05)
+lambda_values = np.arange(0, 1, lambda_interval)
 for epoch in range(num_epochs):
     data_dict = {}
     my_model.train()
