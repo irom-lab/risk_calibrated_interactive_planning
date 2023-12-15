@@ -3,6 +3,9 @@ import numpy as np
 
 # record video
 def record_video(videnv, model, video_length=200, num_videos=3):
+
+    if num_videos <= 0:
+        return
     print('Recording videos...')
     for intent in range(num_videos):
         intent=np.random.choice(5)

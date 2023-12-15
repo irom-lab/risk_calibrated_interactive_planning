@@ -43,6 +43,7 @@ def run():
     parser.add_argument('--learn-steps', type=int, default=100000, help="learn steps per epoch")
     parser.add_argument('--eval-episodes', type=int, default=10000, help="num rollouts for traj collection")
     parser.add_argument('--batch-size', type=int, default=2048)
+    parser.add_argument('--num-videos', type=int, default=0)
     trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
     node = platform.node()
@@ -73,6 +74,7 @@ def run():
     hidden_dim = args["network_hidden_dim"]
     n_eval_episodes = args["eval_episodes"]
     batch_size = args["batch_size"]
+    num_videos = args["num_videos"]
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -155,7 +157,7 @@ def run():
                 model.save(os.path.join(models_dir, f"model_best_{iter}"))
 
         if iter % 50 == 0 and not log_history:
-            record_video(videnv, model, video_length=video_length, num_videos=2)
+            record_video(videnv, model, video_length=video_length, num_videos=num_videos)
 
 
         wandb.log(training_dict)
