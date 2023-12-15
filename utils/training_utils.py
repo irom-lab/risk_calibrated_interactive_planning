@@ -4,10 +4,19 @@ from tqdm import tqdm
 import numpy as np
 from scripts.calibrate_hallway import plot_figures, plot_miscoverage_figure, plot_nonsingleton_figure, hoeffding_bentkus
 
+def entropy(probs):
+    probs = probs + 1e-6
+    logp = probs.log()
+    plogp = probs * logp
+    ent = -plogp.sum(-1)
+    return ent
+
+
 def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=True):
     total_cost = 0
     ce_cost = 0
     mse_cost = 0
+    entropy_cost = 0
     cnt = 0
     dataloader_tqdm = tqdm(dataloader)
     for batch_dict in dataloader_tqdm:
@@ -39,12 +48,14 @@ def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=Tru
         intent_index = batch_z
 
         ce_loss = CE_loss(y_weight, intent_index.long())
+        ent_loss = -entropy(y_weight)
 
-        loss = lowest_mse_loss + ce_loss
+        loss = lowest_mse_loss + ce_loss + ent_loss
         loss = loss.mean()  # Finally, aggregate over batch
 
         ce_cost += ce_loss.detach().mean()
         mse_cost += lowest_mse_loss.detach().mean()
+        entropy_cost += ent_loss.detach().mean()
 
         total_cost += loss.detach()
 
@@ -56,6 +67,7 @@ def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=Tru
     total_cost /= cnt
     ce_cost /= cnt
     mse_cost /= cnt
+    entropy_cost /= cnt
 
     img = None
     if not train:
@@ -63,7 +75,8 @@ def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=Tru
         img = plot_pred(batch_X, robot_state_gt, batch_y, batch_z, y_pred, y_weight)
 
     stats_dict = {"ce_cost": ce_cost,
-                  "mse_cost": mse_cost}
+                  "mse_cost": mse_cost,
+                  "entropy_cost": entropy_cost}
 
     return total_cost, img, stats_dict
 
@@ -106,7 +119,7 @@ def calibrate_predictor(dataloader, model, lambdas, num_cal, traj_len=100, predi
                 for i_lam, lam in enumerate(lambdas):
                     pred_set = probs > lam
                     prediction_set_size[batch_start_ind:batch_end_ind, t, i_lam] = pred_set.sum(-1) > 1
-                    miscoverage_instance[batch_start_ind:batch_end_ind, t, i_lam] = (non_conformity_score[batch_start_ind:batch_end_ind, t] < lam)
+                    miscoverage_instance[batch_start_ind:batch_end_ind, t, i_lam] = (true_label_smx < lam).squeeze(-1)
             batch_start_ind = batch_end_ind
 
     seq_miscoverage_instance = miscoverage_instance.max(1).values.mean(0)
@@ -114,7 +127,7 @@ def calibrate_predictor(dataloader, model, lambdas, num_cal, traj_len=100, predi
     seq_non_conformity_score = non_conformity_score.max(1).values
 
     q_level = np.ceil((num_calibration + 1) * (1 - epsilon)) / num_calibration
-    qhat = np.quantile(non_conformity_score, q_level, method='higher')
+    qhat = np.quantile(seq_non_conformity_score, q_level, method='higher')
 
     pval_miscoverage = hoeffding_bentkus(seq_miscoverage_instance, alpha_val=alpha0, n=num_calibration)
     pval_nonsingleton = hoeffding_bentkus(seq_prediction_set_size, alpha_val=alpha1, n=num_calibration)

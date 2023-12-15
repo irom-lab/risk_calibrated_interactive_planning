@@ -59,7 +59,7 @@ output_len = future_horizon
 diff_order = 1
 hidden_size = hdim
 num_layers = nlayer
-calibration_interval = 100
+calibration_interval = 5
 traj_len = 200
 
 train_set_size=5000
@@ -67,15 +67,16 @@ train_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_tr
 test_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False, max_pred=future_horizon)
 
 batch_size = 32
+val_batch_size = 256
 train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
-test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
+test_loader = DataLoader(test_ds, batch_size=val_batch_size, shuffle=True, collate_fn=collate_fn)
 
 my_model = IntentFormer(hdim, num_segments, future_horizon, params=params).cuda()
 # my_model = TransformerModel(len(input_cols), input_length, output_length=output_len)
 optimizer = optim.Adam(my_model.parameters(), lr=1e-4)
 
 num_thresh = 100
-lambda_interval = 1 // num_thresh
+lambda_interval = 1 / num_thresh
 vis_interval = 5
 num_epochs = 100000
 num_cal = test_ds.__len__()
@@ -123,7 +124,7 @@ for epoch in range(num_epochs):
         print(f"Epoch [{epoch + 1}/{num_epochs}] - "
               f"Train Loss: {epoch_cost_train:.4f}")
 
-    if epoch < 2 or test_losses[-1] < test_losses[-2]:
-        torch.save(my_model.state_dict(), f"{logdir}_epoch{epoch}.pth")
+    # if epoch < 2 or test_losses[-1] < test_losses[-2]:
+    #     torch.save(my_model.state_dict(), f"{logdir}_epoch{epoch}.pth")
 
 

@@ -156,7 +156,7 @@ def run():
             if ep_mean_reward >= best_mean_reward:
                 model.save(os.path.join(models_dir, f"model_best_{iter}"))
 
-        if iter % 50 == 0 and not log_history:
+        if iter > 0 and iter % 50 == 0 and not log_history:
             record_video(videnv, model, video_length=video_length, num_videos=num_videos)
 
 
