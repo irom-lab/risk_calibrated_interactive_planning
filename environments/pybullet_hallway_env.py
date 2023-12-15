@@ -163,7 +163,8 @@ class BulletHallwayEnv(gym.Env):
 
     def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=1, deterministic_intent=None,
                  debug=False, render_mode="rgb_array", time_limit=100, rgb_observation=False,
-                 urdfRoot=pybullet_data.getDataPath(), show_intent=True, history_log_path=None, discrete_action=True):
+                 urdfRoot=pybullet_data.getDataPath(), show_intent=True, history_log_path=None, discrete_action=True,
+                 hide_intent=False, intent_predictor=None):
         super(BulletHallwayEnv, self).__init__()
         self.discrete_action_space = discrete_action
         self.show_intent = show_intent
@@ -174,6 +175,8 @@ class BulletHallwayEnv(gym.Env):
         self.cam_yaw = 65 #-60
         self.cam_pitch = -30
         self.cam_targ = [0, 0, 0]
+        self.hide_intent = hide_intent
+        self.intent_predictor = intent_predictor
 
         if render:
             self.p = bc.BulletClient(connection_mode=pybullet.GUI)
@@ -191,6 +194,8 @@ class BulletHallwayEnv(gym.Env):
 
         self.robot = None
         self.human = None
+        self.prev_obs = None
+
 
         # Define action and observation space
         # They must be gym.spaces objects
@@ -201,7 +206,7 @@ class BulletHallwayEnv(gym.Env):
         if self.discrete_action_space:
             self.action_space = spaces.MultiDiscrete(nvec=np.array([3, 3]))
         else:
-            self.action_space = spaces.Box(low=-max_turning_rate, high=max_turning_rate, shape=(4,))
+            self.action_space = spaces.Box(low=-max_turning_rate, high=max_turning_rate, shape=(1+5,))
 
         # self.action_space = spaces.MultiDiscrete(nvec=[3, 3])
         self.obs_seq_len = obs_seq_len
@@ -249,6 +254,7 @@ class BulletHallwayEnv(gym.Env):
         boundaryshortpath = os.path.join(home, 'PredictiveRL/object/boundary_short.urdf')
         goalpath = os.path.join(home, 'PredictiveRL/object/goal.urdf')
         floorpath = os.path.join(home,"PredictiveRL/object/floor.urdf" )
+        cylinderpath = os.path.join(home,"PredictiveRL/object/cylinder.urdf")
         self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
         self.plane = self.p.loadURDF("plane.urdf",
                                      [0, 0, -1],
@@ -281,11 +287,13 @@ class BulletHallwayEnv(gym.Env):
         for asset in self.wall_assets:
             self.p.changeVisualShape(asset, -1, rgbaColor=[0, 0, 0, 1])
         if self.show_intent:
-            goal_alpha = 1
+            goal_alpha = 0.5
         else:
             goal_alpha = 0
         self.p.changeVisualShape(goal1, -1, rgbaColor=[0, 0, 1, goal_alpha])
         self.p.changeVisualShape(goal2, -1, rgbaColor=[1, 0, 0, goal_alpha])
+        # self.cylinder = self.p.loadURDF(cylinderpath, [4, 0, 0], [0, 0, 0, 1],
+        #                    useFixedBase=True, globalScaling=1)
 
 
         # Boundaries
@@ -298,7 +306,7 @@ class BulletHallwayEnv(gym.Env):
         rightb = self.p.loadURDF(boundaryshortpath,[RIGHT_BOUNDARY,0, 0], leftplane_orientation, useFixedBase=True)
         self.boundary_assets = [ub, lb, leftb, rightb]
         for ba in self.boundary_assets:
-            self.p.changeVisualShape(ba, -1, rgbaColor=[0, 1, 0, 0.5])
+            self.p.changeVisualShape(ba, -1, rgbaColor=[1, 1, 1, 1])
         self.tid = []
         self.rollout_counter = 0
 
@@ -333,7 +341,7 @@ class BulletHallwayEnv(gym.Env):
         observation = self.compute_observation(human_hallway, robot_hallway)
 
         if self.log_history:
-            self.append_state_history()
+            self.append_state_history(self.prev_obs, action)
             if self.truncated:
                 self.save_state_history()
             elif self.done and not self.truncated:
@@ -363,14 +371,24 @@ class BulletHallwayEnv(gym.Env):
             new_action[i] = new_a
         return new_action
 
-    def compute_state_transition(self, action):
+    def infer_intent(self, prev_obs):
+        predictor_input = prev_obs["obs"] # todo: map to input shape
+        prediction, weights = self.intent_predictor(predictor_input)
+        return prediction, weights
+
+    def compute_state_transition(self, action, infer_intent=False):
         action_scale = 1
         action_offset = -2
         agent_0_vel = action_offset  #+action[2]
         agent_1_vel = action_offset  #+action[3]
         mapped_action = self.map_discrete_to_continuous(action)
-        robot_action = np.array([agent_0_vel, action_scale*mapped_action[0]])
-        human_action = np.array([agent_1_vel, action_scale*mapped_action[1]])
+        if self.hide_intent:
+            intent, confidence = self.infer_intent(self.prev_obs)
+        else:
+            intent = self.intent
+        robot_intermediate = mapped_action[intent]
+        robot_action = np.array([agent_0_vel, action_scale*robot_intermediate])
+        human_action = np.array([agent_1_vel, action_scale*mapped_action[-1]])
         same_action_time = 5
         for _ in range(same_action_time):
             self.robot.applyAction(robot_action)
@@ -463,19 +481,21 @@ class BulletHallwayEnv(gym.Env):
             self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
             observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing]),
                                          human_wall_dist, robot_wall_dist,
-                                          np.array([hallway_l2_dist(hallway, self.human_state),
-                                                    hallway_l2_dist(hallway, self.robot_state)]),
-                                         np.array([hallway_l2_dist(robot_hallway, self.human_state),
-                                                  hallway_l2_dist(robot_hallway, self.robot_state)]),
-                                         self.robot_state[-1:], self.human_state[-1:],
+                                         #  np.array([hallway_l2_dist(hallway, self.human_state),
+                                         #            hallway_l2_dist(hallway, self.robot_state)]),
+                                         # np.array([hallway_l2_dist(robot_hallway, self.human_state),
+                                         #          hallway_l2_dist(robot_hallway, self.robot_state)]),
+                                         self.robot_state, self.human_state,
                                          np.array([self.dist_robot, self.dist_human])))
-        observation = {"obs": observation, "mode": np.eye(5)[self.intent]}
+        observation = {"obs": observation, "mode": 0*np.eye(5)[self.intent]}
+        self.prev_obs = observation
         return observation
 
 
     def reset(self, seed=1234, options={}):
 
         self.timesteps = 0
+        self.reset_state_history()
         # if self.human is not None and self.robot is not None:
         #     self.p.removeBody(self.human.racecarUniqueId)
         #     self.p.removeBody(self.robot.racecarUniqueId)
@@ -609,13 +629,6 @@ class BulletHallwayEnv(gym.Env):
 
         observation = self.compute_observation(human_hallway, robot_hallway)
 
-
-        if self.log_history:
-            self.reset_state_history()
-            self.append_state_history()
-            if self.done:
-                self.save_state_history()
-
         return observation, {}
 
     def get_state(self, agentid):
@@ -746,33 +759,33 @@ class BulletHallwayEnv(gym.Env):
 
     def save_state_history(self):
 
-        all_robot_state = np.stack(self.robot_state_history)
-        all_human_state = np.stack(self.human_state_history)
+        all_obs = np.stack(self.observation_history)
+        all_actions = np.stack(self.action_history)
         all_intent = np.stack(self.intent_history)
-        df = pd.DataFrame({"robot_state_x": all_robot_state[:, 0],
-                           "robot_state_y": all_robot_state[:, 1],
-                           "robot_state_heading": all_robot_state[:, 2],
-                           "human_state_x": all_human_state[:, 0],
-                           "human_state_y": all_human_state[:, 1],
-                           "human_state_heading": all_human_state[:, 2],
-                           "human_intent": all_intent})
-        # now = datetime.now()
-        # dt_string = now.strftime("%d_%m_%Y_%H_%M_%S")
+        all_data = np.concatenate((all_obs, all_actions, all_intent[:, None]), axis=-1)
+        cols = [f"col_{c}" for c in range(all_data.shape[-1])]
+        data_dict = {c: all_data[:, i] for i,c in enumerate(cols)}
+        df = pd.DataFrame(data_dict)
+
         dt_string = time.time_ns()
         os.makedirs( os.path.join(self.df_savepath, "rollouts"), exist_ok=True)
         save_path = os.path.join(self.df_savepath, "rollouts", f"rollout_{dt_string}.csv")
         df.to_csv(save_path)
         self.reset_state_history()
 
-    def append_state_history(self):
-        self.robot_state_history.append(self.robot_state)
-        self.human_state_history.append(self.human_state)
+    def append_state_history(self, observation, action):
+        # self.robot_state_history.append(self.robot_state)
+        # self.human_state_history.append(self.human_state)
+        self.observation_history.append(observation["obs"])
+        self.action_history.append(action)
         self.intent_history.append(self.intent)
 
     def reset_state_history(self):
-        self.robot_state_history = []
-        self.human_state_history = []
+        # self.robot_state_history = []
+        # self.human_state_history = []
+        self.observation_history = []
         self.intent_history = []
+        self.action_history = []
         self.rollout_counter += 1
 
 
