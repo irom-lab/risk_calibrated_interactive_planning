@@ -320,7 +320,13 @@ class BulletHallwayEnv(gym.Env):
         self.compute_state_transition(action)
 
         info = {}
-        observation = self.compute_observation()
+        observation, intent_bonus, wrong_hallway, i_best_robot = self.compute_observation()
+
+        # Compute reward
+        wrong_hallway_either = wrong_hallway or (self.robot_state[0] <= -1 and i_best_robot != self.robot_best_hallway_initial)
+        self.compute_reward(wrong_hallway_either, intent_bonus)
+        self.prev_dist_robot = self.dist_robot
+        self.prev_dist_human = self.dist_human
 
         if self.log_history:
             self.append_state_history(self.prev_obs, action)
@@ -450,7 +456,7 @@ class BulletHallwayEnv(gym.Env):
 
     def compute_observation(self, fix_intent=None):
 
-        if fix_intent:
+        if fix_intent is not None:
             intent = fix_intent
         else:
             intent = self.intent
@@ -466,12 +472,6 @@ class BulletHallwayEnv(gym.Env):
             intent_bonus += (self.prev_robot_hallway_dist - robot_best_hallway_dist).item()
         self.prev_robot_hallway_dist = robot_best_hallway_dist
         self.prev_human_hallway_dist = human_hallway_dist
-
-        # Compute reward
-        wrong_hallway_either = wrong_hallway or (self.robot_state[0] <= -1 and i_best_robot != self.robot_best_hallway_initial)
-        self.compute_reward(wrong_hallway_either, intent_bonus)
-        self.prev_dist_robot = self.dist_robot
-        self.prev_dist_human = self.dist_human
 
         if self.rgb_observation:
             self.get_image(resolution_scale=1)
@@ -494,7 +494,7 @@ class BulletHallwayEnv(gym.Env):
                                          np.array([self.dist_robot, self.dist_human])))
         observation = {"obs": observation, "mode": np.eye(5)[intent]}
         self.prev_obs = observation
-        return observation
+        return observation, intent_bonus, wrong_hallway, i_best_robot
 
 
     def reset(self, seed=1234, options={}):
@@ -626,7 +626,8 @@ class BulletHallwayEnv(gym.Env):
         self.done = False
         self.truncated = False
 
-        observation = self.compute_observation()
+        observation, intent_bonus, wrong_hallway, i_best_robot = self.compute_observation()
+        self.robot_best_hallway_initial = i_best_robot
 
         return observation, {}
 
