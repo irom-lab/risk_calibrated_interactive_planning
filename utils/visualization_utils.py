@@ -10,6 +10,7 @@ def get_img_from_fig(fig):
                          newshape=(int(fig.bbox.bounds[3]), int(fig.bbox.bounds[2]), -1))
     plt.close(fig)
     io_buf.close()
+    img = PIL.Image.fromarray(img)
     return img
 
 import PIL
@@ -35,7 +36,6 @@ def plot_pred(batch_X, robot_state_gt, human_state_gt, batch_z, y_pred, z_pred, 
     plt.axis((-6, 6, -4.5, 4.5))
 
     img = get_img_from_fig(fig)
-    img = PIL.Image.fromarray(img)
 
     return img
 

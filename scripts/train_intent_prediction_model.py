@@ -17,7 +17,7 @@ from PIL import Image
 from utils.visualization_utils import plot_pred, get_img_from_fig
 
 from utils.intent_dataset import IntentPredictionDataset, collate_fn
-from utils.training_utils import get_epoch_cost
+from utils.training_utils import get_epoch_cost, calibrate_predictor
 from model_zoo.intent_transformer import IntentFormer
 
 mse_loss = torch.nn.MSELoss(reduction='none')
@@ -59,6 +59,8 @@ output_len = future_horizon
 diff_order = 1
 hidden_size = hdim
 num_layers = nlayer
+calibration_interval = 100
+traj_len = 200
 
 train_set_size=5000
 train_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=True, max_pred=future_horizon)
@@ -74,6 +76,7 @@ optimizer = optim.Adam(my_model.parameters(), lr=1e-4)
 
 vis_interval = 5
 num_epochs = 100000
+num_cal = test_ds.__len__()
 epochs = []
 train_losses = []
 test_losses = []
@@ -82,6 +85,15 @@ for epoch in range(num_epochs):
     data_dict = {}
     my_model.train()
 
+    if epoch % calibration_interval == 0:
+        risk_metrics, calibration_img = calibrate_predictor(test_loader,
+                                                                my_model,
+                                                                lambda_values,
+                                                                num_cal=num_cal,
+                                                                traj_len=traj_len)
+        data_dict.update(risk_metrics)
+        for k, img in calibration_img.items():
+            data_dict[k] = wandb.Image(img)
     epoch_cost_train, _, train_stats = get_epoch_cost(train_loader, optimizer, my_model, mse_loss, CE_loss, train=True)
 
     data_dict["train_loss"] = epoch_cost_train
@@ -90,18 +102,14 @@ for epoch in range(num_epochs):
 
 
     if epoch % vis_interval == 0:
-        epoch_cost_val, viz_img, val_stats = get_epoch_cost(test_loader, optimizer, my_model, mse_loss, CE_loss, train=False)
+        with torch.no_grad():
+            epoch_cost_val, viz_img, val_stats = get_epoch_cost(test_loader, optimizer, my_model, mse_loss, CE_loss, train=False)
         data_dict["val_loss"] = epoch_cost_val
-        data_dict["example_vis"] = [wandb.Image(viz_img)]
+        data_dict["example_vis"] = wandb.Image(viz_img)
         for k, v in val_stats.items():
             data_dict["val_" + k] = v
 
-    if epoch % calibration_interval == 0:
-        epoch_cost_val, viz_img, val_stats = calibrate_predictor(test_loader, my_model, lambda_values)
-        data_dict["val_loss"] = calibration_cost
-        data_dict["example_vis"] = [wandb.Image(viz_img)]
-        for k, v in val_stats.items():
-            data_dict["val_" + k] = v
+
 
     epochs.append(epoch)
     train_losses.append(epoch_cost_train)

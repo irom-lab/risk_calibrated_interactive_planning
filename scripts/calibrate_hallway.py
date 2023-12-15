@@ -16,6 +16,8 @@ import wandb
 from wandb_osh.hooks import TriggerWandbSyncHook
 from model_zoo.vlm_interface import vlm, hallway_parse_response
 from scipy.stats import binom
+from utils.visualization_utils import get_img_from_fig
+import torch
 
 trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
@@ -33,12 +35,7 @@ logdir = os.path.join(home, f"PredictiveRL/conformal_outputs/{int(time.time())}/
 dataframe_path = os.path.join(home, f"PredictiveRL/conformal_outputs/{int(time.time())}.csv")
 
 
-def plot_figures(non_conformity_score, is_bullet=False, epsilon = 0.15, num_calibration=500, save_fig=False):
-
-    q_level = np.ceil((num_calibration + 1) * (1 - epsilon)) / num_calibration
-    qhat = np.quantile(non_conformity_score, q_level, method='higher')
-    print('Quantile value qhat:', qhat)
-    print('')
+def plot_figures(non_conformity_score, qhat, is_bullet=False, save_fig=False):
 
     # plot histogram and quantile
     plt.figure()
@@ -58,20 +55,23 @@ def plot_figures(non_conformity_score, is_bullet=False, epsilon = 0.15, num_cali
         name = 'bullet_hallway_non_conformity.png'
     if save_fig:
         plt.savefig(name)
-    return plt.gcf()
+    return get_img_from_fig(plt.gcf())
 
 
-def plot_risk_figures(prediction_set_size, is_bullet=False, save_fig=False):
+def plot_nonsingleton_figure(lambdas, prediction_set_size, alpha=0.15, is_bullet=False, save_fig=False):
 
     # plot histogram and quantile
-    x_list = list(prediction_set_size.keys())
-    y_list = [np.mean(v) for v in prediction_set_size.values()]
+    x_list = lambdas
+    y_list = prediction_set_size
     plt.figure(figsize=(6, 2))
     plt.scatter(x_list, y_list, edgecolor='k', linewidth=1)
-    plt.title(
-        'Prediction Set Size versus Detection Level'
+    plt.axhline(
+        y=alpha, linestyle='--', color='r', label='Limit Value'
     )
-    plt.xlabel('Detection Level')
+    plt.title(
+        'Nonsingleton Rate versus Prediction Set Threshold'
+    )
+    plt.xlabel('Prediction Set Threshold')
     plt.legend()
     if not is_bullet:
         name = 'hallway_set_size.png'
@@ -81,7 +81,32 @@ def plot_risk_figures(prediction_set_size, is_bullet=False, save_fig=False):
     if save_fig:
         plt.savefig(name)
 
-    return plt.gcf()
+    return get_img_from_fig(plt.gcf())
+
+def plot_miscoverage_figure(lambdas, miscoverage_rate, alpha=0.15, is_bullet=False, save_fig=False):
+
+    # plot histogram and quantile
+    x_list = lambdas
+    y_list = miscoverage_rate
+    plt.figure(figsize=(6, 2))
+    plt.scatter(x_list, y_list, edgecolor='k', linewidth=1)
+    plt.axhline(
+        y=alpha, linestyle='--', color='r', label='Limit Value'
+    )
+    plt.title(
+        'Miscoverage Rate versus Prediction Threshold'
+    )
+    plt.xlabel('Threshold')
+    plt.legend()
+    if not is_bullet:
+        name = 'hallway_set_size.png'
+    else:
+        name = 'bullet_hallway_miscoverage_ragte.png'
+
+    if save_fig:
+        plt.savefig(name)
+
+    return get_img_from_fig(plt.gcf())
 
 
 def calibrate_hallway(env, model, n_cal=100, prediction_step_interval=10, image_obs=False):
@@ -153,21 +178,23 @@ def calibrate_hallway(env, model, n_cal=100, prediction_step_interval=10, image_
 
 
 def hoeffding_bentkus(risk_values, alpha_val=0.9, n=100):
-    sample_risk_mean = np.mean(risk_values)
+    sample_risk_mean = risk_values
+    alpha_val = torch.Tensor([alpha_val]).to(risk_values.device)
 
-    max_alpha = np.max(sample_risk_mean, alpha_val)
-    ce = cross_entropy(max_alpha, alpha_val)
+    max_alpha = torch.minimum(risk_values, alpha_val)
+    ce = cross_entropy(max_alpha, alpha_val).clip(min=0)  # clip avoids p-val > 1 (p-val will still be bad)
     left_term = np.exp(-n * ce)
 
     x = np.ceil(n * sample_risk_mean)
     bin_cdf = binom.cdf(x, n, alpha_val)
     right_term = np.e * bin_cdf
+    right_term = torch.Tensor(right_term).to(risk_values.device)
 
-    hb_p_val = np.min(left_term, right_term)
+    hb_p_val = torch.minimum(left_term, right_term)
     return hb_p_val
 
 def cross_entropy(a, b):
-    return a * np.log(a/b) + (1-a) * np.log((1/a)/(1/b))
+    return a * np.log(a/(b+0.001)+0.001) + (1-a) * np.log((1-a)/(1-b+0.001) + 0.001)
 
 
 
