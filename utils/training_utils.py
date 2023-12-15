@@ -119,10 +119,14 @@ def calibrate_predictor(dataloader, model, lambdas, num_cal, traj_len=100, predi
     pval_miscoverage = hoeffding_bentkus(seq_miscoverage_instance, alpha_val=alpha0, n=num_calibration)
     pval_nonsingleton = hoeffding_bentkus(seq_prediction_set_size, alpha_val=alpha1, n=num_calibration)
     combined_pval = np.array([max(p1, p2) for (p1, p2) in zip(pval_miscoverage, pval_nonsingleton)])
-    optimal_lambda_index = (combined_pval < min(alpha0, alpha1)).nonzero()[0][0].item()  # get the lowest val for optimal coverage
+    valid_ltt = any(combined_pval < min(alpha0, alpha1))
+    if valid_ltt:
+        optimal_lambda_index = (combined_pval < min(alpha0, alpha1)).nonzero()[0][0].item()  # get the lowest val for optimal coverage
+        highest_acceptable_pval_miscoverage_index = (pval_miscoverage < alpha0).nonzero()[-1].item()
+        lowest_acceptable_pval_nonsingleton_index = (pval_nonsingleton < alpha1).nonzero()[0].item()
+    else:
+        optimal_lambda_index = highest_acceptable_pval_miscoverage_index = lowest_acceptable_pval_nonsingleton_index = 0
     optimal_lambda = lambdas[optimal_lambda_index]
-    highest_acceptable_pval_miscoverage_index = (pval_miscoverage < alpha0).nonzero()[-1].item()
-    lowest_acceptable_pval_nonsingleton_index = (pval_nonsingleton < alpha1).nonzero()[0].item()
     lambda_ub_miscoverage = lambdas[highest_acceptable_pval_miscoverage_index]
     lambda_lb_nonsingleton = lambdas[lowest_acceptable_pval_nonsingleton_index]
 
@@ -147,7 +151,8 @@ def calibrate_predictor(dataloader, model, lambdas, num_cal, traj_len=100, predi
                     "optimal_pval_nonsingleton": pval_nonsingleton[optimal_lambda_index].item(),
                     "optimal_nonsingleton_rate": seq_prediction_set_size[optimal_lambda_index].item(),
                     "optimal_miscoverage_rate": seq_miscoverage_instance[optimal_lambda_index].item(),
-                    "qhat": qhat}
+                    "qhat": qhat,
+                    "valid_ltt": 1 if valid_ltt else 0}
 
     risk_metrics = {}
     for k,v in risk_metrics_pre.items():

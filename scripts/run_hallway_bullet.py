@@ -31,6 +31,7 @@ from wandb_osh.hooks import TriggerWandbSyncHook  # <-- New!
 
 def run():
     parser = argparse.ArgumentParser(prog='BulletHallwayEnv')
+    parser.add_argument('--max-steps', type=int, default=100)
     parser.add_argument('--network-hidden-dim', type=int, default=64)
     parser.add_argument('--n-epochs', type=int, default=10)
     parser.add_argument('--log-history', type=str2bool, default=False)
@@ -46,22 +47,20 @@ def run():
     node = platform.node()
     if node == 'mae-majumdar-lab6' or node == "jlidard":
         home = expanduser("~")   # lab desktop
-        max_steps = 100
         debug = False
         online = False
 
     elif node == 'mae-ani-lambda':
         home = expanduser("~")   # della fast IO file system
-        max_steps = 200
         debug = False
         online = True
     else:
         home = '/scratch/gpfs/jlidard/'  # della fast IO file system
-        max_steps = 300
         debug = False
         online = False
 
     args = vars(parser.parse_args())
+    max_steps = args["max_steps"]
     render = args["render"]
     num_cpu = args["num_envs"]
     log_history = args["log_history"]
