@@ -116,10 +116,11 @@ def run():
             mode="offline"
         )
 
+    batch_size = max_steps*num_cpu
     print('Training Policy.')
     policy_kwargs = dict(net_arch=dict(pi=[hidden_dim, hidden_dim, hidden_dim], vf=[hidden_dim, hidden_dim, hidden_dim]))
     model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir,
-                n_steps=max_steps, n_epochs=n_epochs, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs,
+                n_steps=max_steps, batch_size=batch_size, n_epochs=n_epochs, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs,
                 device=device)
     if load_path is not None:
         model = PPO.load(load_path, env=env)
@@ -127,6 +128,7 @@ def run():
 
     callback = SaveOnBestTrainingRewardCallback(check_freq=save_freq, log_dir=logdir)
 
+    print(f"Running PPO with a batch size of {batch_size}")
     print("Starting training...")
     best_mean_reward = -np.Inf
     for iter in range(n_iters):
