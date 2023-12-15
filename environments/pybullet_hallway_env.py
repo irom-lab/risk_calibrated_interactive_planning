@@ -319,7 +319,7 @@ class BulletHallwayEnv(gym.Env):
         if self.human_state[0] >= 0:
             intent_bonus += (self.prev_human_hallway_dist - human_hallway_dist).item()
         if self.robot_state[0] <= 0:
-            intent_bonus += 0 # (self.prev_robot_hallway_dist - robot_best_hallway_dist).item()
+            intent_bonus += (self.prev_robot_hallway_dist - robot_best_hallway_dist).item()
         self.prev_robot_hallway_dist = robot_best_hallway_dist
         self.prev_human_hallway_dist = human_hallway_dist
 
