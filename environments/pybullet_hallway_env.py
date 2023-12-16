@@ -161,7 +161,7 @@ def rect_unpack_sides(rect):
 
 class BulletHallwayEnv(gym.Env):
 
-    def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=1, deterministic_intent=None,
+    def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=10, deterministic_intent=None,
                  debug=False, render_mode="rgb_array", time_limit=100, rgb_observation=False,
                  urdfRoot=pybullet_data.getDataPath(), show_intent=True, history_log_path=None, discrete_action=True,
                  hide_intent=False, intent_predictor=None):
@@ -334,8 +334,6 @@ class BulletHallwayEnv(gym.Env):
                 self.save_state_history()
             elif self.done and not self.truncated:
                 self.reset_state_history()
-
-        if self.display_render:
             if self.tid is not None:
                 for t in self.tid:
                     self.p.removeUserDebugItem(t)
@@ -365,7 +363,7 @@ class BulletHallwayEnv(gym.Env):
         return prediction, weights
 
     def compute_state_transition(self, action, infer_intent=False):
-        action_scale = 1
+        action_scale = 0.1
         action_offset = -2
         agent_0_vel = action_offset  #+action[2]
         agent_1_vel = action_offset  #+action[3]
