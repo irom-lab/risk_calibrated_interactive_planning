@@ -1,5 +1,5 @@
 import numpy as np
-from stable_baselines3 import PPO, SAC #, MultiModalPPO
+from stable_baselines3 import PPO, SAC, MultiModalPPO
 #from sb3_contrib import RecurrentPPO
 from environments.pybullet_hallway_env import BulletHallwayEnv
 from environments.make_vectorized_hallway_env import make_bullet_env
@@ -121,7 +121,7 @@ def run():
 
     print('Training Policy.')
     policy_kwargs = dict(net_arch=dict(pi=[hidden_dim, hidden_dim, hidden_dim], vf=[hidden_dim, hidden_dim, hidden_dim]))
-    model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir,
+    model = MultiModalPPO('MultiModalPolicy', env, verbose=1, tensorboard_log=logdir,
                 n_steps=max_steps, batch_size=batch_size, n_epochs=n_epochs, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs,
                 device=device)
     if load_path is not None:
