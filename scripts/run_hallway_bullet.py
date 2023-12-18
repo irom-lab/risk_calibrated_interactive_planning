@@ -121,7 +121,7 @@ def run():
 
     print('Training Policy.')
     policy_kwargs = dict(net_arch=dict(pi=[hidden_dim, hidden_dim, hidden_dim], vf=[hidden_dim, hidden_dim, hidden_dim]))
-    model = MultiModalPPO('MultiModalPolicy', env, verbose=1, tensorboard_log=logdir,
+    model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir,
                 n_steps=max_steps, batch_size=batch_size, n_epochs=n_epochs, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs,
                 device=device)
     if load_path is not None:

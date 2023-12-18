@@ -206,7 +206,7 @@ class BulletHallwayEnv(gym.Env):
         if self.discrete_action_space:
             self.action_space = spaces.MultiDiscrete(nvec=np.array([3, 3]))
         else:
-            self.action_space = spaces.Box(low=-max_turning_rate, high=max_turning_rate, shape=(1+5,))
+            self.action_space = spaces.Box(low=-max_turning_rate, high=max_turning_rate, shape=(2,))
 
         # self.action_space = spaces.MultiDiscrete(nvec=[3, 3])
         self.obs_seq_len = obs_seq_len
@@ -217,7 +217,7 @@ class BulletHallwayEnv(gym.Env):
             self.observation_space = {"obs": spaces.Box(low=0, high=255, shape=(256, 256, 3), dtype=np.uint8),
                                       "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)}
         else:
-            self.observation_space = {"obs": spaces.Box(low=-np.inf, high=np.inf, shape=(40,), dtype=np.float32),
+            self.observation_space = {"obs": spaces.Box(low=-np.inf, high=np.inf, shape=(24,), dtype=np.float32),
                                       "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)}
                                   # "agent": spaces.Box(low=0, high=1, shape=(2,), dtype=np.float32)}
         self.observation_space = spaces.Dict(self.observation_space)
@@ -376,9 +376,10 @@ class BulletHallwayEnv(gym.Env):
             intent, confidence = self.infer_intent(self.prev_obs)
         else:
             intent = self.intent
-        robot_intermediate = mapped_action[intent]
-        robot_action = np.array([agent_0_vel, action_scale*robot_intermediate])
-        human_action = np.array([agent_1_vel, action_scale*mapped_action[-1]])
+        robot_action_turn = action_scale*mapped_action[0]
+        human_action_turn = action_scale*mapped_action[-1]
+        robot_action = np.array([agent_0_vel, robot_action_turn])
+        human_action = np.array([agent_1_vel, human_action_turn])
         same_action_time = 5
         for _ in range(same_action_time):
             self.robot.applyAction(robot_action)
@@ -487,13 +488,12 @@ class BulletHallwayEnv(gym.Env):
             dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
             dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
             l2_dist_list = []
-            for z in range(5):
-                _, human_hallway_z, _ = self.compute_dist_to_hallways(z, is_human=True)
-                _, robot_hallway_z, _ = self.compute_dist_to_hallways(z, is_human=False)
-                l2_dist_list.append(hallway_l2_dist(human_hallway_z, self.human_state))
-                l2_dist_list.append(hallway_l2_dist(human_hallway_z, self.robot_state))
-                l2_dist_list.append(hallway_l2_dist(robot_hallway_z, self.human_state))
-                l2_dist_list.append(hallway_l2_dist(robot_hallway_z, self.robot_state))
+            _, human_hallway_z, _ = self.compute_dist_to_hallways(intent, is_human=True)
+            _, robot_hallway_z, _ = self.compute_dist_to_hallways(intent, is_human=False)
+            l2_dist_list.append(hallway_l2_dist(human_hallway_z, self.human_state))
+            l2_dist_list.append(hallway_l2_dist(human_hallway_z, self.robot_state))
+            l2_dist_list.append(hallway_l2_dist(robot_hallway_z, self.human_state))
+            l2_dist_list.append(hallway_l2_dist(robot_hallway_z, self.robot_state))
             l2_hallway_dist = np.stack(l2_dist_list)
             observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing]),
                                          human_wall_dist, robot_wall_dist,
