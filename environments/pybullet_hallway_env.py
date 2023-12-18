@@ -243,6 +243,7 @@ class BulletHallwayEnv(gym.Env):
         self.prev_human_hallway_dist = 0
         self.prev_robot_hallway_dist = 0
         self.robot_best_hallway_initial = None
+        self.human_reached = self.robot_reached = False
 
         # Load assets
         self.p.setGravity(0, 0, -9.8)
@@ -426,14 +427,14 @@ class BulletHallwayEnv(gym.Env):
         violated_dist = any(wall_dist <= 0.25) or any(human_wall_dist <= 0.25)
         collision_penalty = 0
         if violated_dist:
-            self.done = False
+            self.done = True
             collision_penalty += 0.01
 
         if collision_with_human(self.robot_state, self.human_state):
             self.done = True
 
         if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1:
-            self.done = False
+            self.done = True
             collision_penalty += 0.000
 
         if wrong_hallway:
@@ -445,8 +446,18 @@ class BulletHallwayEnv(gym.Env):
         
         self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
         self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
-        human_reach_bonus = 0.1 if self.dist_human == 0 else 0
-        robot_reach_bonus = 0.1 if self.dist_robot == 0 else 0
+        human_reached_curr = self.dist_human == 0
+        robot_reached_curr = self.dist_robot == 0
+        human_reach_bonus = 0.1 if human_reached_curr else 0
+        robot_reach_bonus = 0.1 if robot_reached_curr else 0
+        if human_reached_curr and not self.human_reached:
+            self.human_reached = True
+        elif not human_reached_curr and self.human_reached:
+            self.done = True
+        if robot_reached_curr and not self.robot_reached:
+            self.robot_reached = True
+        elif not robot_reached_curr and self.robot_reached:
+            self.done = True
         reach_bonus = human_reach_bonus + robot_reach_bonus
         self.robot_distance = np.linalg.norm(self.robot_state[:2] - self.robot_goal_rect[:2])
         self.human_distance = np.linalg.norm(self.human_state[:2] - self.human_goal_rect[:2])
@@ -509,6 +520,7 @@ class BulletHallwayEnv(gym.Env):
 
         self.timesteps = 0
         self.reset_state_history()
+        self.human_reached = self.robot_reached = False
         # if self.human is not None and self.robot is not None:
         #     self.p.removeBody(self.human.racecarUniqueId)
         #     self.p.removeBody(self.robot.racecarUniqueId)

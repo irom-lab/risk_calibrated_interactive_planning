@@ -1,5 +1,5 @@
 import numpy as np
-from stable_baselines3 import PPO, SAC, MultiModalPPO
+from stable_baselines3 import PPO, SAC #, MultiModalPPO
 #from sb3_contrib import RecurrentPPO
 from environments.pybullet_hallway_env import BulletHallwayEnv
 from environments.make_vectorized_hallway_env import make_bullet_env
