@@ -309,6 +309,10 @@ class BulletHallwayEnv(gym.Env):
             self.p.changeVisualShape(ba, -1, rgbaColor=[1, 1, 1, 1])
         self.tid = []
         self.rollout_counter = 0
+        self.policy_model = None
+
+    def set_policy_model(self, policy):
+        self.policy_model = policy
 
     def step(self, action):
 
@@ -491,12 +495,13 @@ class BulletHallwayEnv(gym.Env):
                 l2_dist_list.append(hallway_l2_dist(robot_hallway_z, self.human_state))
                 l2_dist_list.append(hallway_l2_dist(robot_hallway_z, self.robot_state))
             l2_hallway_dist = np.stack(l2_dist_list)
+            print(l2_hallway_dist)
             observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing]),
                                          human_wall_dist, robot_wall_dist,
                                          l2_hallway_dist,
                                          self.robot_state, self.human_state,
                                          np.array([dist_robot, dist_human])))
-        observation = {"obs": observation, "mode": 0*np.eye(5)[intent]}
+        observation = {"obs": observation, "mode": np.eye(5)[intent]}
         self.prev_obs = observation
         return observation, intent_bonus, wrong_hallway, i_best_robot
 
