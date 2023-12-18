@@ -96,15 +96,6 @@ def run():
     video_length = max_steps
 
     # Create the vectorized environment
-    if use_counterfactual_policy:
-        # dummy_env = BulletHallwayEnv(render=False,
-        #                              debug=debug,
-        #                              time_limit=max_steps,
-        #                              rgb_observation=rgb_observation,
-        #                              discrete_action=use_discrete_action)
-        eval_policy = PPO.load(counterfactual_policy_load_path, device="cuda")
-    else:
-        eval_policy = None
     if hide_intent:
         intent_predictor = None
     else:
