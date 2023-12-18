@@ -217,7 +217,7 @@ class BulletHallwayEnv(gym.Env):
             self.observation_space = {"obs": spaces.Box(low=0, high=255, shape=(256, 256, 3), dtype=np.uint8),
                                       "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)}
         else:
-            self.observation_space = {"obs": spaces.Box(low=-np.inf, high=np.inf, shape=(24,), dtype=np.float32),
+            self.observation_space = {"obs": spaces.Box(low=-np.inf, high=np.inf, shape=(40,), dtype=np.float32),
                                       "mode": spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)}
                                   # "agent": spaces.Box(low=0, high=1, shape=(2,), dtype=np.float32)}
         self.observation_space = spaces.Dict(self.observation_space)
@@ -480,17 +480,23 @@ class BulletHallwayEnv(gym.Env):
             human_delta_bearing = np.arctan2(human_delta[0], human_delta[1])
             human_wall_dist = wall_set_distance(self.walls, self.human_state)
             robot_wall_dist = wall_set_distance(self.walls, self.robot_state)
-            self.dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
-            self.dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
+            dist_robot, _ = distance_to_goal(self.robot_state, self.robot_goal_rect)
+            dist_human, _ = distance_to_goal(self.human_state, self.human_goal_rect)
+            l2_dist_list = []
+            for z in range(5):
+                _, human_hallway_z, _ = self.compute_dist_to_hallways(z, is_human=True)
+                _, robot_hallway_z, _ = self.compute_dist_to_hallways(z, is_human=False)
+                l2_dist_list.append(hallway_l2_dist(human_hallway_z, self.human_state))
+                l2_dist_list.append(hallway_l2_dist(human_hallway_z, self.robot_state))
+                l2_dist_list.append(hallway_l2_dist(robot_hallway_z, self.human_state))
+                l2_dist_list.append(hallway_l2_dist(robot_hallway_z, self.robot_state))
+            l2_hallway_dist = np.stack(l2_dist_list)
             observation = np.concatenate((np.array([human_delta_pos, human_delta_bearing]),
                                          human_wall_dist, robot_wall_dist,
-                                          np.array([hallway_l2_dist(human_hallway, self.human_state),
-                                                    hallway_l2_dist(human_hallway, self.robot_state)]),
-                                         np.array([hallway_l2_dist(robot_hallway, self.human_state),
-                                                  hallway_l2_dist(robot_hallway, self.robot_state)]),
+                                         l2_hallway_dist,
                                          self.robot_state, self.human_state,
-                                         np.array([self.dist_robot, self.dist_human])))
-        observation = {"obs": observation, "mode": np.eye(5)[intent]}
+                                         np.array([dist_robot, dist_human])))
+        observation = {"obs": observation, "mode": 0*np.eye(5)[intent]}
         self.prev_obs = observation
         return observation, intent_bonus, wrong_hallway, i_best_robot
 
