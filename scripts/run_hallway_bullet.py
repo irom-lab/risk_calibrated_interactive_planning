@@ -124,12 +124,8 @@ def run():
     model = MultiModalPPO('MultiModalPolicy', env, verbose=1, tensorboard_log=logdir,
                 n_steps=max_steps, batch_size=batch_size, n_epochs=n_epochs, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs,
                 device=device)
-    model2 = MultiModalPPO('MultiModalPolicy', env, verbose=1, tensorboard_log=logdir,
-                n_steps=max_steps, batch_size=batch_size, n_epochs=n_epochs, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs,
-                device=device)
     if load_path is not None:
         model = PPO.load(load_path, env=env)
-    env.venv.env_method("set_policy_model", model2)
     # model = SAC('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir, learning_rate=1e-4, gamma=0.999)
 
     callback = SaveOnBestTrainingRewardCallback(check_freq=save_freq, log_dir=logdir)
