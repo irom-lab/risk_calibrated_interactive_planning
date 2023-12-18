@@ -49,14 +49,12 @@ class IntentPredictionDataset(Dataset):
         traj_len = len(rollout_data.index)
         traj_stop = np.random.randint(low=10, high=traj_len-self.max_pred)
         Tstop = traj_stop
-        full_traj = torch.Tensor(rollout_data.iloc[:, :].values).cuda()
-        state_history = torch.Tensor(rollout_data.iloc[:Tstop, :-1].values).cuda()
+        obs_history = torch.Tensor(rollout_data.iloc[:Tstop, :-1].values).cuda()
         robot_state_gt = torch.Tensor(rollout_data.iloc[Tstop:Tstop+self.max_pred, 4:6].values).cuda()
         human_state_gt = torch.Tensor(rollout_data.iloc[Tstop:Tstop+self.max_pred, 1:3].values).cuda()
         intent_gt = torch.Tensor(rollout_data.iloc[Tstop:Tstop+self.max_pred, -1].values).cuda()
 
-        ret_dict = {"full_traj": full_traj,
-                    "state_history": state_history,
+        ret_dict = {"obs_history": obs_history,
                     "robot_state_gt": robot_state_gt,
                     "human_state_gt": human_state_gt,
                     "intent_gt": intent_gt}

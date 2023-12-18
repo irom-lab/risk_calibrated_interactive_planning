@@ -164,7 +164,7 @@ class BulletHallwayEnv(gym.Env):
     def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=3, deterministic_intent=None,
                  debug=False, render_mode="rgb_array", time_limit=100, rgb_observation=False,
                  urdfRoot=pybullet_data.getDataPath(), show_intent=True, history_log_path=None, discrete_action=True,
-                 hide_intent=False, intent_predictor=None):
+                 hide_intent=False, intent_predictor=None, eval_policy=None):
         super(BulletHallwayEnv, self).__init__()
         self.discrete_action_space = discrete_action
         self.show_intent = show_intent
@@ -177,6 +177,7 @@ class BulletHallwayEnv(gym.Env):
         self.cam_targ = [0, 0, 0]
         self.hide_intent = hide_intent
         self.intent_predictor = intent_predictor
+        self.eval_policy = eval_policy
 
         if render:
             self.p = bc.BulletClient(connection_mode=pybullet.GUI)
@@ -310,10 +311,9 @@ class BulletHallwayEnv(gym.Env):
             self.p.changeVisualShape(ba, -1, rgbaColor=[1, 1, 1, 1])
         self.tid = []
         self.rollout_counter = 0
-        self.policy_model = None
 
     def set_policy_model(self, policy):
-        self.policy_model = policy
+        self.eval_policy = policy
 
     def step(self, action):
 
@@ -334,7 +334,9 @@ class BulletHallwayEnv(gym.Env):
         self.prev_dist_human = self.dist_human
 
         if self.log_history:
+            # all_actions = self.get_all_counterfactual_actions()
             self.append_state_history(self.prev_obs, action)
+            self.prev_obs = self.get_all_counterfactual_observations()
             if self.truncated:
                 self.save_state_history()
             elif self.done and not self.truncated:
@@ -468,7 +470,17 @@ class BulletHallwayEnv(gym.Env):
         self.prev_reward = self.reward
         self.cumulative_reward += self.reward
 
+    def get_all_counterfactual_observations(self):
+
+        all_obs = []
+        for intent in range(5):
+            temp_obs, _, _, _ = self.compute_observation(fix_intent=intent)
+            all_obs.append(temp_obs["obs"])
+        return np.concatenate(all_obs)
+
+
     def compute_observation(self, fix_intent=None):
+        # Fix_intent ensures no side effects
 
         if fix_intent is not None:
             intent = fix_intent
@@ -479,13 +491,14 @@ class BulletHallwayEnv(gym.Env):
         intent_bonus = 0
         human_hallway_dist, human_hallway, wrong_hallway = self.compute_dist_to_hallways(intent, is_human=True)
         robot_best_hallway_dist, robot_hallway, i_best_robot = self.compute_dist_to_hallways(intent, is_human=False)
-        self.i_best_robot = i_best_robot
         if self.human_state[0] >= 0:
             intent_bonus += (self.prev_human_hallway_dist - human_hallway_dist).item()
         if self.robot_state[0] <= 0:
             intent_bonus += (self.prev_robot_hallway_dist - robot_best_hallway_dist).item()
-        self.prev_robot_hallway_dist = robot_best_hallway_dist
-        self.prev_human_hallway_dist = human_hallway_dist
+        if fix_intent is None:
+            self.i_best_robot = i_best_robot
+            self.prev_robot_hallway_dist = robot_best_hallway_dist
+            self.prev_human_hallway_dist = human_hallway_dist
 
         if self.rgb_observation:
             self.get_image(resolution_scale=1)
@@ -512,7 +525,6 @@ class BulletHallwayEnv(gym.Env):
                                          self.robot_state, self.human_state,
                                          np.array([dist_robot, dist_human])))
         observation = {"obs": observation, "mode": np.eye(5)[intent]}
-        self.prev_obs = observation
         return observation, intent_bonus, wrong_hallway, i_best_robot
 
 
@@ -588,10 +600,12 @@ class BulletHallwayEnv(gym.Env):
                                          pos=(human_position[0],human_position[1],0.2*scale),
                                          orientation=human_orientation,
                                          globalScaling=scale)
+            self.p.changeVisualShape(self.human.racecarUniqueId, -1, rgbaColor=[0.8, 0, 0, 1])
             self.robot = racecar.Racecar(self.p, urdfRootPath=self.urdfRoot, timeStep=self.timesteps,
                                          pos=(robot_position[0],robot_position[1],0.2*scale),
                                          orientation=robot_orientation,
                                          globalScaling=scale)
+            self.p.changeVisualShape(self.robot.racecarUniqueId, -1, rgbaColor=[0, 0, 0.8, 1])
             if self.show_intent:
                 intent = self.p.loadURDF(self.wallpath, [wall_left + WALL_XLEN / 2, wall_up - WALL_YLEN / 2, -0.495],
                                          [0, 0, 0, 1],
@@ -648,6 +662,7 @@ class BulletHallwayEnv(gym.Env):
 
         observation, intent_bonus, wrong_hallway, i_best_robot = self.compute_observation()
         self.robot_best_hallway_initial = i_best_robot
+        self.prev_obs = self.get_all_counterfactual_observations()
 
         return observation, {}
 
@@ -739,7 +754,7 @@ class BulletHallwayEnv(gym.Env):
     def append_state_history(self, observation, action):
         # self.robot_state_history.append(self.robot_state)
         # self.human_state_history.append(self.human_state)
-        self.observation_history.append(observation["obs"])
+        self.observation_history.append(observation)
         self.action_history.append(action)
         self.intent_history.append(self.intent)
 

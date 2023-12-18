@@ -27,7 +27,7 @@ def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=Tru
             optimizer.zero_grad()
         else:
             my_model.eval()
-        batch_X = batch_dict["state_history"]
+        batch_X = batch_dict["obs_history"]
         batch_y = batch_dict["human_state_gt"]
         robot_state_gt = batch_dict["robot_state_gt"]
         batch_z = batch_dict["intent_gt"][:, -1]
@@ -80,7 +80,23 @@ def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=Tru
 
     return total_cost, img, stats_dict
 
-def calibrate_predictor(dataloader, model, lambdas, num_cal, traj_len=100, predict_step_interval=10, epsilon=0.15, alpha0=0.15, alpha1=0.15):
+def make_obs_dict_hallway(obs, intent, intent_index):
+
+    batch_size, num_intent = intent.shape
+    def to_onehot(z):
+        onehot = torch.eye(5)[None].repeat(batch_size, 1, 1).cpu()
+        intent_onehot = onehot[:, intent_index]
+        return intent_onehot
+
+    intent_onehot = to_onehot(intent)
+    index_start = 1+intent_index*24
+    index_end = index_start + 24
+    obs_dict = {"obs": obs[..., -1, index_start:index_end].cpu(), "mode": intent_onehot}
+    return obs_dict
+
+
+def calibrate_predictor(dataloader, model, policy_model, lambdas, num_cal, traj_len=100, predict_step_interval=10,
+                        num_intent=5, epsilon=0.15, alpha0=0.15, alpha1=0.15, equal_action_mask_dist=0.05):
 
     cnt = 0
     num_lambdas = len(lambdas)
@@ -97,10 +113,11 @@ def calibrate_predictor(dataloader, model, lambdas, num_cal, traj_len=100, predi
         for batch_dict in dataloader_tqdm:
             cnt += 1
 
-            batch_X = batch_dict["state_history"].cuda()
+            batch_X = batch_dict["obs_history"].cuda()
             batch_y = batch_dict["human_state_gt"].cuda()
             robot_state_gt = batch_dict["robot_state_gt"]
             batch_z = batch_dict["intent_gt"].cuda()
+            batch_size = batch_X.shape[0]
 
             batch_end_ind = batch_start_ind + robot_state_gt.shape[0]
 
@@ -110,14 +127,24 @@ def calibrate_predictor(dataloader, model, lambdas, num_cal, traj_len=100, predi
             for t, endpoint in enumerate(traj_windows):
                 input_t = batch_X[:, :endpoint]
                 label = batch_z[:, endpoint-1].long()
-
                 y_pred, y_weight = model(input_t)
-                probs = y_weight.softmax(dim=-1)
-                true_label_smx = torch.gather(probs, -1, label[:, None])
+                y_weight = y_weight.softmax(dim=-1)
+                action_set = torch.zeros((batch_size, num_intent)).cuda()
+                for intent in range(5):
+                    label_tmp = (intent)*torch.ones_like(label)[:, None]
+                    obs_dict_tmp = make_obs_dict_hallway(input_t, label_tmp, intent)
+                    counterfactual_action, _ = policy_model.predict(obs_dict_tmp)
+                    action_set[:, intent] = torch.Tensor(counterfactual_action[:, 0]).cuda()
+                optimal_action = torch.gather(action_set, -1, label[:, None])
+                equal_action_mask = (optimal_action - action_set)**2
+                equal_action_mask = equal_action_mask.sqrt()
+                equal_action_mask = equal_action_mask <= equal_action_mask_dist
+                action_set_probs = y_weight * equal_action_mask
+                true_label_smx = action_set_probs.sum(-1) # torch.gather(probs, -1, label[:, None])
                 non_conformity_score[batch_start_ind:batch_end_ind, t] = (1 - true_label_smx).squeeze(-1)
 
                 for i_lam, lam in enumerate(lambdas):
-                    pred_set = probs > lam
+                    pred_set = action_set_probs > lam
                     prediction_set_size[batch_start_ind:batch_end_ind, t, i_lam] = pred_set.sum(-1) > 1
                     miscoverage_instance[batch_start_ind:batch_end_ind, t, i_lam] = (true_label_smx < lam).squeeze(-1)
             batch_start_ind = batch_end_ind

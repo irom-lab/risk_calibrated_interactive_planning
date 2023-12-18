@@ -44,6 +44,7 @@ def run():
     parser.add_argument('--eval-episodes', type=int, default=10000, help="num rollouts for traj collection")
     parser.add_argument('--batch-size', type=int, default=2048)
     parser.add_argument('--num-videos', type=int, default=0)
+    parser.add_argument('--counterfactual-policy-load-path', type=str, default=None)
     trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
     node = platform.node()
@@ -75,6 +76,9 @@ def run():
     n_eval_episodes = args["eval_episodes"]
     batch_size = args["batch_size"]
     num_videos = args["num_videos"]
+    counterfactual_policy_load_path = args["counterfactual_policy_load_path"]
+    use_counterfactual_policy = log_history
+    hide_intent = False
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -92,13 +96,28 @@ def run():
     video_length = max_steps
 
     # Create the vectorized environment
+    if use_counterfactual_policy:
+        # dummy_env = BulletHallwayEnv(render=False,
+        #                              debug=debug,
+        #                              time_limit=max_steps,
+        #                              rgb_observation=rgb_observation,
+        #                              discrete_action=use_discrete_action)
+        eval_policy = PPO.load(counterfactual_policy_load_path, device="cuda")
+    else:
+        eval_policy = None
+    if hide_intent:
+        intent_predictor = None
+    else:
+        intent_predictor = None
     env = SubprocVecEnv([make_bullet_env(i,
                                          render=render,
                                          debug=debug,
                                          time_limit=max_steps,
                                          rgb_observation=rgb_observation,
                                          history_log_path=history_log_path,
-                                         discrete_action=use_discrete_action)
+                                         discrete_action=use_discrete_action,
+                                         eval_policy=None,
+                                         intent_predictor=intent_predictor)
                          for i in range(num_cpu)])
     env = VecMonitor(env, logdir + "log")
     videnv = BulletHallwayEnv(render=render,
@@ -108,6 +127,7 @@ def run():
                               discrete_action=use_discrete_action)
     videnv = DummyVecEnv([lambda: videnv])
     videnv = VecVideoRecorder(videnv, video_folder=logdir, record_video_trigger=lambda x: True, video_length=video_length)
+
 
     if online:
         wandb.init(
@@ -120,10 +140,12 @@ def run():
         )
 
     print('Training Policy.')
+
+
     policy_kwargs = dict(net_arch=dict(pi=[hidden_dim, hidden_dim, hidden_dim], vf=[hidden_dim, hidden_dim, hidden_dim]))
     model = PPO('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir,
-                n_steps=max_steps, batch_size=batch_size, n_epochs=n_epochs, learning_rate=1e-4, gamma=0.999, policy_kwargs=policy_kwargs,
-                device=device)
+                n_steps=max_steps, batch_size=batch_size, n_epochs=n_epochs, learning_rate=1e-4, gamma=0.999,
+                policy_kwargs=policy_kwargs, device=device)
     if load_path is not None:
         model = PPO.load(load_path, env=env)
     # model = SAC('MultiInputPolicy', env, verbose=1, tensorboard_log=logdir, learning_rate=1e-4, gamma=0.999)

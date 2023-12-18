@@ -22,7 +22,8 @@ def make_env(rank, seed=0, render=False,debug=False, time_limit=100, rgb_observa
     return _init
 
 
-def make_bullet_env(rank, seed=0, render=False, debug=False, time_limit=100, rgb_observation=False, history_log_path=None, discrete_action=True):
+def make_bullet_env(rank, seed=0, render=False, debug=False, time_limit=100, rgb_observation=False,
+                    history_log_path=None, discrete_action=True, eval_policy=None, intent_predictor=None):
     """
     Utility function for multiprocessed env.
 
@@ -32,7 +33,14 @@ def make_bullet_env(rank, seed=0, render=False, debug=False, time_limit=100, rgb
     :param rank: (int) index of the subprocess
     """
     def _init():
-        env = BulletHallwayEnv(render=render, debug=debug, time_limit=time_limit, rgb_observation=rgb_observation, history_log_path=history_log_path, discrete_action=discrete_action)
+        env = BulletHallwayEnv(render=render,
+                               debug=debug,
+                               time_limit=time_limit,
+                               rgb_observation=rgb_observation,
+                               history_log_path=history_log_path,
+                               discrete_action=discrete_action,
+                               eval_policy=eval_policy,
+                               intent_predictor=intent_predictor)
         #penv.reset(seed=seed + rank)
         return env
     set_random_seed(seed)
