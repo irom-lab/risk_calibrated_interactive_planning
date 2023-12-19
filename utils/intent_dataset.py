@@ -11,7 +11,7 @@ from collections import OrderedDict
 class IntentPredictionDataset(Dataset):
     """Face Landmarks dataset."""
 
-    def __init__(self, root_dir, train_set_size=5, is_train=True, max_pred=100):
+    def __init__(self, root_dir, train_set_size=5, is_train=True, max_pred=100, debug=False, min_len=10, target_len=200):
         """
         Arguments:
             csv_file (string): Path to the csv file with annotations.
@@ -22,21 +22,35 @@ class IntentPredictionDataset(Dataset):
         self.max_pred = max_pred
         subdirs = sorted(os.listdir(root_dir))
         self.is_train = is_train
+        self.min_len = min_len
         if is_train:
-            subdirs = subdirs[:train_set_size]
+            if debug:
+                subdirs = subdirs[:100]
+            else:
+                subdirs = subdirs[:train_set_size]
         else:
-            subdirs = subdirs[train_set_size:]
+            if debug:
+                subdirs = subdirs[-100:]
+            else:
+                subdirs = subdirs[train_set_size:]
         self.traj_dict = OrderedDict()
+        self.target_len=target_len
         self.file_names = {}
         i = 0
         for subdir in subdirs:
             file_path = os.path.join(root_dir, subdir)
             if not os.path.isfile(file_path):
                 continue
-            self.traj_dict[subdir] = pd.read_csv(file_path, on_bad_lines='skip')
-            self.file_names[i] = subdir
-            i += 1
+            traj_data = pd.read_csv(file_path, on_bad_lines='skip')
+            if self.valid_traj(traj_data):
+                self.traj_dict[subdir] = traj_data
+                self.file_names[i] = subdir
+                i += 1
         self.root_dir = root_dir
+
+    def valid_traj(self, traj_data):
+        return len(traj_data.index) == self.target_len
+
 
     def __len__(self):
         return len(list(self.traj_dict.keys()))
@@ -47,16 +61,20 @@ class IntentPredictionDataset(Dataset):
         rollout_data = self.traj_dict[filename]
 
         traj_len = len(rollout_data.index)
-        traj_stop = np.random.randint(low=10, high=traj_len-self.max_pred)
+        traj_stop = np.random.randint(low=self.min_len, high=traj_len-self.max_pred)
         Tstop = traj_stop
-        obs_history = torch.Tensor(rollout_data.iloc[:Tstop, :-1].values).cuda()
-        robot_state_gt = torch.Tensor(rollout_data.iloc[Tstop:Tstop+self.max_pred, 4:6].values).cuda()
-        human_state_gt = torch.Tensor(rollout_data.iloc[Tstop:Tstop+self.max_pred, 1:3].values).cuda()
+        obs_history = torch.Tensor(rollout_data.iloc[:Tstop, :-3].values).cuda()
+        robot_state_gt = torch.Tensor(rollout_data.iloc[Tstop:Tstop+self.max_pred, 17:19].values).cuda()
+        human_state_gt = torch.Tensor(rollout_data.iloc[Tstop:Tstop+self.max_pred, 20:22].values).cuda()
+        robot_full_traj = torch.Tensor(rollout_data.iloc[:, 17:19].values).cuda()
+        human_full_traj = torch.Tensor(rollout_data.iloc[:, 20:22].values).cuda()
         intent_gt = torch.Tensor(rollout_data.iloc[Tstop:Tstop+self.max_pred, -1].values).cuda()
 
         ret_dict = {"obs_history": obs_history,
                     "robot_state_gt": robot_state_gt,
                     "human_state_gt": human_state_gt,
+                    "robot_full_traj": robot_full_traj,
+                    "human_full_traj": human_full_traj,
                     "intent_gt": intent_gt}
 
         return ret_dict

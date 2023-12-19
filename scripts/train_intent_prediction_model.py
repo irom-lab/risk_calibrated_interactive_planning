@@ -38,9 +38,17 @@ def run():
     parser.add_argument('--use-discrete-action-space', type=str2bool, default=True)
     parser.add_argument('--learn-steps', type=int, default=100000, help="learn steps per epoch")
     parser.add_argument('--eval-episodes', type=int, default=10000, help="num rollouts for traj collection")
-    parser.add_argument('--batch-size', type=int, default=2048)
+    parser.add_argument('--batch-size', type=int, default=32)
+    parser.add_argument('--val-batch-size', type=int, default=64)
     parser.add_argument('--num-videos', type=int, default=0)
     parser.add_argument('--counterfactual-policy-load-path', type=str, default=None)
+    parser.add_argument('--rollout-num', type=int, default=None)
+    parser.add_argument('--train-set-size', type=int, default=5)
+    parser.add_argument('--min-traj-len', type=int, default=10)
+    parser.add_argument('--max-pred-len', type=int, default=5)
+    parser.add_argument('--debug', type=str2bool, default=False)
+    parser.add_argument('--entropy-coeff', type=float, default=0.0)
+
 
     node = platform.node()
     if node == 'mae-majumdar-lab6' or node == "jlidard":
@@ -67,6 +75,13 @@ def run():
     counterfactual_policy_load_path = args["counterfactual_policy_load_path"]
     use_counterfactual_policy = log_history
     hide_intent = False
+    rollout_num = args["rollout_num"]
+    batch_size = args["batch_size"]
+    val_batch_size = args["val_batch_size"]
+    train_set_size = args["train_set_size"]
+    debug = args["debug"]
+    min_traj_len = args["min_traj_len"]
+    max_pred_len = args["max_pred_len"]
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -89,14 +104,13 @@ def run():
     CE_loss = torch.nn.CrossEntropyLoss(reduction='none')
 
     home = expanduser("~")
-    rollout_num = 1702923704
     logdir = os.path.join(home, f"PredictiveRL/models/predictor_{rollout_num}/")
     csv_dir = f"/home/jlidard/PredictiveRL/logs/{rollout_num}/rollouts"
 
     os.makedirs(logdir, exist_ok=True)
 
     hdim = 256
-    future_horizon = 50
+    future_horizon = max_pred_len
     num_segments = 1
     coord_dim = 3
     num_hiddens = 3
@@ -109,7 +123,7 @@ def run():
     )
 
 
-    params = {"traj_input_dim": 123,
+    params = {"traj_input_dim": 121,
               "num_hiddens": num_hiddens,
               "n_head": n_head,
               "num_transformer_encoder_layers": nlayer,
@@ -124,15 +138,12 @@ def run():
     diff_order = 1
     hidden_size = hdim
     num_layers = nlayer
-    calibration_interval = 5
+    calibration_interval = 50
     traj_len = 200
 
-    train_set_size=5
-    train_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=True, max_pred=future_horizon)
-    test_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False, max_pred=future_horizon)
+    train_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=True, max_pred=future_horizon, debug=debug, min_len=min_traj_len)
+    test_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False, max_pred=future_horizon, debug=debug, min_len=min_traj_len)
 
-    batch_size = 32
-    val_batch_size = 256
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
     test_loader = DataLoader(test_ds, batch_size=val_batch_size, shuffle=True, collate_fn=collate_fn)
 

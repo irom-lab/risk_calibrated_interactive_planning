@@ -23,8 +23,8 @@ def plot_pred(batch_X, robot_state_gt, human_state_gt, batch_z, y_pred, z_pred, 
 
     fig = plt.figure()
 
-    plt.scatter(batch_X[batch, :, 1], batch_X[batch, :, 2], c='black')
-    plt.scatter(batch_X[batch, :, 4], batch_X[batch, :, 5], c='black')
+    plt.scatter(batch_X[batch, :, 17], batch_X[batch, :, 18], c='black')
+    plt.scatter(batch_X[batch, :, 20], batch_X[batch, :, 21], c='black')
     plt.scatter(robot_state_gt[batch, :, 0], robot_state_gt[batch, :, 1], c='orange')
     plt.scatter(human_state_gt[batch, :, 0], human_state_gt[batch, :, 1], c='orange')
 

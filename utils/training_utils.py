@@ -12,7 +12,7 @@ def entropy(probs):
     return ent
 
 
-def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=True):
+def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=True, ent_coeff=0.0):
     total_cost = 0
     ce_cost = 0
     mse_cost = 0
@@ -50,7 +50,7 @@ def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=Tru
         ce_loss = CE_loss(y_weight, intent_index.long())
         ent_loss = -entropy(y_weight)
 
-        loss = lowest_mse_loss + ce_loss + ent_loss
+        loss = lowest_mse_loss + ce_loss + ent_coeff*ent_loss
         loss = loss.mean()  # Finally, aggregate over batch
 
         ce_cost += ce_loss.detach().mean()
