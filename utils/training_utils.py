@@ -31,7 +31,7 @@ def get_epoch_cost(dataloader, optimizer, scheduler, my_model, mse_loss, CE_loss
         batch_X = batch_dict["obs_full"][:, :random_traj_len]
         batch_y = batch_dict["human_full_traj"][:, random_traj_len:random_traj_len+max_pred]
         human_state_history = batch_dict["human_full_traj"][:, :random_traj_len]
-        robot_state_gt = batch_dict["robot_full_traj"][:, :random_traj_len]
+        robot_state_gt = batch_dict["robot_full_traj"][:, random_traj_len:random_traj_len+max_pred]
         batch_z = batch_dict["intent_full"][:, random_traj_len]
 
         batch_X = batch_X.cuda()

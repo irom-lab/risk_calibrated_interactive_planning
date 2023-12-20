@@ -90,6 +90,7 @@ def run():
     calibration_interval = args["calibration_interval"]
     validation_interval = args["validation_interval"]
     calibration_set_size = args["calibration_set_size"]
+    entropy_coeff = args["entropy_coeff"]
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -161,7 +162,7 @@ def run():
     optimizer = optim.Adam(my_model.parameters(), lr=1e-4)
     def lr_lambda(epoch):
         decay_fracs = [1, 0.5, 0.25, 0.125, 0.125/2]
-        epoch_drops = [0, 20, 30, 40, 50]
+        epoch_drops = [0, 50, 80, 90, 100]
         lowest_drop = 0
         i_lowest = 0
         for i, e in enumerate(epoch_drops):
@@ -199,7 +200,7 @@ def run():
                 data_dict[k] = wandb.Image(img)
         epoch_cost_train, _, train_stats = get_epoch_cost(train_loader, optimizer, scheduler, my_model,
                                                           mse_loss, CE_loss, traj_len, min_traj_len,
-                                                          future_horizon, train=True)
+                                                          future_horizon, train=True, ent_coeff=entropy_coeff)
 
         data_dict["train_loss"] = epoch_cost_train
         for k,v in train_stats.items():
