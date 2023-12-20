@@ -16,6 +16,8 @@ import argparse
 import platform
 from utils.general_utils import str2bool
 
+from torch.optim.lr_scheduler import LambdaLR
+
 from PIL import Image
 
 from utils.visualization_utils import plot_pred, get_img_from_fig
@@ -50,6 +52,7 @@ def run():
     parser.add_argument('--offline', type=str2bool, default=False)
     parser.add_argument('--calibration-interval', type=int, default=5)
     parser.add_argument('--validation-interval', type=int, default=5)
+    parser.add_argument('--calibration-set-size', type=int, default=500)
 
 
     node = platform.node()
@@ -86,6 +89,7 @@ def run():
     offline = args["offline"]
     calibration_interval = args["calibration_interval"]
     validation_interval = args["validation_interval"]
+    calibration_set_size = args["calibration_set_size"]
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -146,19 +150,34 @@ def run():
 
     train_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=True, max_pred=future_horizon, debug=debug, min_len=min_traj_len)
     test_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False, max_pred=future_horizon, debug=debug, min_len=min_traj_len)
+    cal_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False, max_pred=future_horizon, debug=debug, min_len=min_traj_len, max_in_set=calibration_set_size)
 
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
     test_loader = DataLoader(test_ds, batch_size=val_batch_size, shuffle=True, collate_fn=collate_fn)
+    cal_loader = DataLoader(cal_ds, batch_size=val_batch_size, shuffle=True, collate_fn=collate_fn)
 
     my_model = IntentFormer(hdim, num_segments, future_horizon, params=params).cuda()
     # my_model = TransformerModel(len(input_cols), input_length, output_length=output_len)
     optimizer = optim.Adam(my_model.parameters(), lr=1e-4)
+    def lr_lambda(epoch):
+        decay_fracs = [1, 0.5, 0.25, 0.125, 0.125/2]
+        epoch_drops = [0, 20, 30, 40, 50]
+        lowest_drop = 0
+        i_lowest = 0
+        for i, e in enumerate(epoch_drops):
+            if e < epoch:
+                lowest_drop = e
+                i_lowest = i
+        lr = decay_fracs[i_lowest]
+        return lr
+    lambda1 = lambda epoch: epoch // 30
+    scheduler = LambdaLR(optimizer, lr_lambda=[lambda1])
 
     num_thresh = 100
     lambda_interval = 1 / num_thresh
     vis_interval = validation_interval
     num_epochs = 100000
-    num_cal = test_ds.__len__()
+    num_cal = cal_ds.__len__()
     epochs = []
     train_losses = []
     test_losses = []
@@ -168,7 +187,7 @@ def run():
         my_model.train()
 
         if epoch % calibration_interval == 0:
-            risk_metrics, calibration_img = calibrate_predictor(test_loader,
+            risk_metrics, calibration_img = calibrate_predictor(cal_loader,
                                                                     my_model,
                                                                     eval_policy,
                                                                     lambda_values,
@@ -178,7 +197,7 @@ def run():
             data_dict.update(risk_metrics)
             for k, img in calibration_img.items():
                 data_dict[k] = wandb.Image(img)
-        epoch_cost_train, _, train_stats = get_epoch_cost(train_loader, optimizer, my_model, mse_loss, CE_loss, train=True)
+        epoch_cost_train, _, train_stats = get_epoch_cost(train_loader, scheduler, my_model, mse_loss, CE_loss, train=True)
 
         data_dict["train_loss"] = epoch_cost_train
         for k,v in train_stats.items():
@@ -187,7 +206,7 @@ def run():
 
         if epoch % vis_interval == 0:
             with torch.no_grad():
-                epoch_cost_val, viz_img, val_stats = get_epoch_cost(test_loader, optimizer, my_model, mse_loss, CE_loss, train=False)
+                epoch_cost_val, viz_img, val_stats = get_epoch_cost(test_loader, scheduler, my_model, mse_loss, CE_loss, train=False)
             data_dict["val_loss"] = epoch_cost_val
             data_dict["example_vis"] = wandb.Image(viz_img)
             for k, v in val_stats.items():

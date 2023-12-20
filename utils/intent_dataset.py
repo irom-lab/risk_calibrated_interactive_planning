@@ -11,7 +11,7 @@ from collections import OrderedDict
 class IntentPredictionDataset(Dataset):
     """Face Landmarks dataset."""
 
-    def __init__(self, root_dir, train_set_size=5, is_train=True, max_pred=100, debug=False, min_len=10, target_len=200):
+    def __init__(self, root_dir, train_set_size=5, is_train=True, max_pred=100, debug=False, min_len=10, target_len=200, max_in_set=None):
         """
         Arguments:
             csv_file (string): Path to the csv file with annotations.
@@ -40,6 +40,8 @@ class IntentPredictionDataset(Dataset):
         for subdir in subdirs:
             file_path = os.path.join(root_dir, subdir)
             if not os.path.isfile(file_path):
+                continue
+            if max_in_set is not None and i >= max_in_set:
                 continue
             traj_data = pd.read_csv(file_path, on_bad_lines='skip')
             if self.valid_traj(traj_data):
