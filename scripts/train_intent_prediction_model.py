@@ -212,9 +212,7 @@ def run():
             for k, v in val_stats.items():
                 data_dict["val_" + k] = v
 
-        data_dict["learning_rate"] = scheduler.get_lr()[0]
-
-
+        data_dict["learning_rate"] = scheduler.get_last_lr()[0]
 
         epochs.append(epoch)
         train_losses.append(epoch_cost_train)
