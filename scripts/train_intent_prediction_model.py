@@ -199,6 +199,8 @@ def run():
         train_losses.append(epoch_cost_train)
         test_losses.append(epoch_cost_val)
 
+        wandb.log(data_dict)
+
         if epoch % 100 == 0:
             print(f"Epoch [{epoch + 1}/{num_epochs}] - "
                   f"Train Loss: {epoch_cost_train:.4f}")
