@@ -12,7 +12,7 @@ def entropy(probs):
     return ent
 
 
-def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=True, mse_coeff=1, ce_coeff=100, ent_coeff=0.0):
+def get_epoch_cost(dataloader, optimizer, scheduler, my_model, mse_loss, CE_loss, train=True, mse_coeff=1, ce_coeff=100, ent_coeff=0.0):
     total_cost = 0
     ce_cost = 0
     mse_cost = 0
