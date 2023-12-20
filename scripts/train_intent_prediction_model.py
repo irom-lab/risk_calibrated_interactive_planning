@@ -171,7 +171,7 @@ def run():
         lr = decay_fracs[i_lowest]
         return lr
     lambda1 = lambda epoch: epoch // 30
-    scheduler = LambdaLR(optimizer, lr_lambda=[lambda1])
+    scheduler = LambdaLR(optimizer, lr_lambda=[lr_lambda])
 
     num_thresh = 100
     lambda_interval = 1 / num_thresh
@@ -211,6 +211,8 @@ def run():
             data_dict["example_vis"] = wandb.Image(viz_img)
             for k, v in val_stats.items():
                 data_dict["val_" + k] = v
+
+        data_dict["learning_rate"] = scheduler.get_lr()[0]
 
 
 
