@@ -12,7 +12,7 @@ def entropy(probs):
     return ent
 
 
-def get_epoch_cost(dataloader, optimizer, scheduler, my_model, mse_loss, CE_loss, train=True, mse_coeff=1, ce_coeff=100, ent_coeff=0.0):
+def get_epoch_cost(dataloader, optimizer, scheduler, my_model, mse_loss, CE_loss, traj_len, min_len, max_pred, train=True, mse_coeff=1, ce_coeff=100, ent_coeff=0.0):
     total_cost = 0
     ce_cost = 0
     mse_cost = 0
@@ -27,11 +27,12 @@ def get_epoch_cost(dataloader, optimizer, scheduler, my_model, mse_loss, CE_loss
             optimizer.zero_grad()
         else:
             my_model.eval()
-        batch_X = batch_dict["obs_history"]
-        batch_y = batch_dict["human_state_gt"]
-        human_state_history = batch_dict["human_state_history"]
-        robot_state_gt = batch_dict["robot_state_gt"]
-        batch_z = batch_dict["intent_gt"][:, -1]
+        random_traj_len = np.random.randint(low=min_len, high=traj_len-max_pred)
+        batch_X = batch_dict["obs_full"][:, :random_traj_len]
+        batch_y = batch_dict["human_full_traj"][:, random_traj_len:random_traj_len+max_pred]
+        human_state_history = batch_dict["human_full_traj"][:, :random_traj_len]
+        robot_state_gt = batch_dict["robot_full_traj"][:, :random_traj_len]
+        batch_z = batch_dict["intent_full"][:, random_traj_len]
 
         batch_X = batch_X.cuda()
         batch_y = batch_y.cuda()

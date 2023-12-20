@@ -63,7 +63,7 @@ class IntentPredictionDataset(Dataset):
         rollout_data = self.traj_dict[filename]
 
         traj_len = len(rollout_data.index)
-        traj_stop = np.random.randint(low=self.min_len, high=traj_len-self.max_pred)
+        traj_stop = traj_len - self.max_pred # np.random.randint(low=self.min_len, high=traj_len-self.max_pred)
         Tstop = traj_stop
         obs_history = torch.Tensor(rollout_data.iloc[:Tstop, :-3].values).cuda()
         obs_full = torch.Tensor(rollout_data.iloc[:, :-3].values).cuda()

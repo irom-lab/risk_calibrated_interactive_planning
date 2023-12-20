@@ -197,7 +197,9 @@ def run():
             data_dict.update(risk_metrics)
             for k, img in calibration_img.items():
                 data_dict[k] = wandb.Image(img)
-        epoch_cost_train, _, train_stats = get_epoch_cost(train_loader, optimizer, scheduler, my_model, mse_loss, CE_loss, train=True)
+        epoch_cost_train, _, train_stats = get_epoch_cost(train_loader, optimizer, scheduler, my_model,
+                                                          mse_loss, CE_loss, traj_len, min_traj_len,
+                                                          future_horizon, train=True)
 
         data_dict["train_loss"] = epoch_cost_train
         for k,v in train_stats.items():
@@ -206,7 +208,10 @@ def run():
 
         if epoch % vis_interval == 0:
             with torch.no_grad():
-                epoch_cost_val, viz_img, val_stats = get_epoch_cost(test_loader, optimizer, scheduler, my_model, mse_loss, CE_loss, train=False)
+                epoch_cost_val, viz_img, val_stats = get_epoch_cost(test_loader, optimizer, scheduler,
+                                                                    my_model, mse_loss, CE_loss,
+                                                                    traj_len, min_traj_len,
+                                                                    future_horizon, train=False)
             data_dict["val_loss"] = epoch_cost_val
             data_dict["example_vis"] = wandb.Image(viz_img)
             for k, v in val_stats.items():
