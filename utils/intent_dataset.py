@@ -30,7 +30,7 @@ class IntentPredictionDataset(Dataset):
                 subdirs = subdirs[:train_set_size]
         else:
             if debug:
-                subdirs = subdirs[-100:]
+                subdirs = subdirs[:100]
             else:
                 subdirs = subdirs[train_set_size:]
         self.traj_dict = OrderedDict()
@@ -64,18 +64,24 @@ class IntentPredictionDataset(Dataset):
         traj_stop = np.random.randint(low=self.min_len, high=traj_len-self.max_pred)
         Tstop = traj_stop
         obs_history = torch.Tensor(rollout_data.iloc[:Tstop, :-3].values).cuda()
+        obs_full = torch.Tensor(rollout_data.iloc[:, :-3].values).cuda()
         robot_state_gt = torch.Tensor(rollout_data.iloc[Tstop:Tstop+self.max_pred, 17:19].values).cuda()
         human_state_gt = torch.Tensor(rollout_data.iloc[Tstop:Tstop+self.max_pred, 20:22].values).cuda()
+        human_state_history = torch.Tensor(rollout_data.iloc[:Tstop, 20:22].values).cuda()
         robot_full_traj = torch.Tensor(rollout_data.iloc[:, 17:19].values).cuda()
         human_full_traj = torch.Tensor(rollout_data.iloc[:, 20:22].values).cuda()
         intent_gt = torch.Tensor(rollout_data.iloc[Tstop:Tstop+self.max_pred, -1].values).cuda()
+        intent_full = torch.Tensor(rollout_data.iloc[:, -1].values).cuda()
 
         ret_dict = {"obs_history": obs_history,
+                    "human_state_history": human_state_history,
+                    "obs_full":  obs_full,
                     "robot_state_gt": robot_state_gt,
                     "human_state_gt": human_state_gt,
                     "robot_full_traj": robot_full_traj,
                     "human_full_traj": human_full_traj,
-                    "intent_gt": intent_gt}
+                    "intent_gt": intent_gt,
+                    "intent_full": intent_full}
 
         return ret_dict
 

@@ -18,9 +18,9 @@ class MLP(torch.nn.Module):
         )
         self.hidden_layers.append(first_layer)
 
-        for k in range(1, len(h_sizes)-2):
+        for k in range(1, len(h_sizes)-1):
             subsequent_layer = torch.nn.Sequential(
-                torch.nn.Linear(h_sizes[k], h_sizes[k+1]),
+                torch.nn.Linear(h_sizes[k-1], h_sizes[k]),
                 torch.nn.ReLU()
             )
             self.hidden_layers.append(subsequent_layer)

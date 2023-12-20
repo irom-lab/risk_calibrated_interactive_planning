@@ -33,7 +33,6 @@ def run():
     parser.add_argument('--log-history', type=str2bool, default=False)
     parser.add_argument('--load-model', type=str2bool, default=False)
     parser.add_argument('--render', type=str2bool, default=False)
-    parser.add_argument('--model-load-path', type=str, default=None)
     parser.add_argument('--num-envs', type=int, default=1)
     parser.add_argument('--use-discrete-action-space', type=str2bool, default=True)
     parser.add_argument('--learn-steps', type=int, default=100000, help="learn steps per epoch")
@@ -48,6 +47,9 @@ def run():
     parser.add_argument('--max-pred-len', type=int, default=5)
     parser.add_argument('--debug', type=str2bool, default=False)
     parser.add_argument('--entropy-coeff', type=float, default=0.0)
+    parser.add_argument('--offline', type=str2bool, default=False)
+    parser.add_argument('--calibration-interval', type=int, default=5)
+    parser.add_argument('--validation-interval', type=int, default=5)
 
 
     node = platform.node()
@@ -64,7 +66,6 @@ def run():
     num_cpu = args["num_envs"]
     log_history = args["log_history"]
     load_model = args["load_model"]
-    load_path = args["model_load_path"] if load_model else None
     use_discrete_action = args["use_discrete_action_space"]
     learn_steps = args["learn_steps"]
     n_epochs = args["n_epochs"]
@@ -82,6 +83,9 @@ def run():
     debug = args["debug"]
     min_traj_len = args["min_traj_len"]
     max_pred_len = args["max_pred_len"]
+    offline = args["offline"]
+    calibration_interval = args["calibration_interval"]
+    validation_interval = args["validation_interval"]
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -119,7 +123,7 @@ def run():
 
     wandb.init(
         project="conformal_rl_prediction",
-        mode="online"
+        mode="online" if not offline else "offline"
     )
 
 
@@ -138,7 +142,6 @@ def run():
     diff_order = 1
     hidden_size = hdim
     num_layers = nlayer
-    calibration_interval = 50
     traj_len = 200
 
     train_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=True, max_pred=future_horizon, debug=debug, min_len=min_traj_len)
@@ -153,7 +156,7 @@ def run():
 
     num_thresh = 100
     lambda_interval = 1 / num_thresh
-    vis_interval = 5
+    vis_interval = validation_interval
     num_epochs = 100000
     num_cal = test_ds.__len__()
     epochs = []
@@ -170,7 +173,8 @@ def run():
                                                                     eval_policy,
                                                                     lambda_values,
                                                                     num_cal=num_cal,
-                                                                    traj_len=traj_len)
+                                                                    traj_len=traj_len,
+                                                                    predict_step_interval=min_traj_len)
             data_dict.update(risk_metrics)
             for k, img in calibration_img.items():
                 data_dict[k] = wandb.Image(img)
@@ -194,8 +198,6 @@ def run():
         epochs.append(epoch)
         train_losses.append(epoch_cost_train)
         test_losses.append(epoch_cost_val)
-
-        wandb.log(data_dict)
 
         if epoch % 100 == 0:
             print(f"Epoch [{epoch + 1}/{num_epochs}] - "

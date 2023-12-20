@@ -23,7 +23,7 @@ class IntentFormerDecoder(torch.nn.Module):
         time_horizon = self.future_horizon
         self.nlayer = nlayer
 
-        anchor_endpoints = torch.normal(0, 1, size=(num_intent_modes, 2))
+        anchor_endpoints = torch.Tensor([[0, 4], [0, 2], [0, 0], [0, -2], [0, -4]])
         self.traj_anchors = anchor_endpoints.cuda()
         out_dim = time_horizon * coord_dim
         self.anchor_encoder_mlp = create_mlp(2, [hidden_dim, hidden_dim])

@@ -21,7 +21,7 @@ class IntentFormerEncoder(torch.nn.Module):
                                                                           batch_first=True)
         self.transformer_encoder = torch.nn.TransformerEncoder(self.transformer_encoder_layer, num_layers=nlayer)
 
-    def forward(self, input):
+    def forward(self, input, pos_history):
         """
         :param input: Tensor of shape [B, T, D], with T large
         :return:
@@ -35,6 +35,21 @@ class IntentFormerEncoder(torch.nn.Module):
         input_reshaped = input
         encoded_input = self.local_mlp(input_reshaped)
 
-        transformer_embedding = self.transformer_encoder(encoded_input)
+        pos_embed = self.get_pos_sineembed(pos_history)
+        transformer_encoder_input = torch.cat((encoded_input, pos_embed), dim=1)
+        transformer_embedding = self.transformer_encoder(transformer_encoder_input)
+        transformer_embedding = transformer_embedding[:, :T]
 
         return transformer_embedding
+
+    def get_pos_sineembed(self, pos):
+        batch_size, traj_len, num_coord = pos.shape
+        denom = 10000 ** (2 * torch.arange(self.hidden_dim) / self.hidden_dim).cuda()
+        denom = denom[None, None, :].repeat(batch_size, traj_len, 1)
+        sineembed_x = torch.sin(pos[:, :, 0:1] / denom[:, :, ::4])
+        cosembed_x = torch.cos(pos[:, :, 0:1] / denom[:, :, ::4])
+        sineembed_y = torch.sin(pos[:, :, 1:2] / denom[:, :, ::4])
+        cosembed_y = torch.cos(pos[:, :, 1:2] / denom[:, :, ::4])
+        all_embed = torch.cat((sineembed_x, cosembed_x, sineembed_y, cosembed_y), dim=-1)
+        return all_embed
+

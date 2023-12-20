@@ -12,7 +12,7 @@ def entropy(probs):
     return ent
 
 
-def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=True, ent_coeff=0.0):
+def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=True, mse_coeff=1, ce_coeff=100, ent_coeff=0.0):
     total_cost = 0
     ce_cost = 0
     mse_cost = 0
@@ -29,13 +29,14 @@ def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=Tru
             my_model.eval()
         batch_X = batch_dict["obs_history"]
         batch_y = batch_dict["human_state_gt"]
+        human_state_history = batch_dict["human_state_history"]
         robot_state_gt = batch_dict["robot_state_gt"]
         batch_z = batch_dict["intent_gt"][:, -1]
 
         batch_X = batch_X.cuda()
         batch_y = batch_y.cuda()
 
-        y_pred, y_weight = my_model(batch_X)
+        y_pred, y_weight = my_model(batch_X, human_state_history)
         y_weight = y_weight.softmax(dim=-1)
 
         loss_mse_list = []
@@ -43,14 +44,14 @@ def get_epoch_cost(dataloader, optimizer, my_model, mse_loss, CE_loss, train=Tru
             loss_mse = mse_loss(y_pred[:, mode], batch_y)
             loss_mse_list.append(loss_mse)
         loss_mse = torch.stack(loss_mse_list, 1)
-        loss_mse = loss_mse.mean(dim=-1).mean(dim=-1)
+        loss_mse = loss_mse.sum(dim=-1).sum(dim=-1)
         lowest_mse_loss, lowest_mse_index = torch.min(loss_mse, dim=1)
         intent_index = batch_z
 
         ce_loss = CE_loss(y_weight, intent_index.long())
         ent_loss = -entropy(y_weight)
 
-        loss = lowest_mse_loss + ce_loss + ent_coeff*ent_loss
+        loss = mse_coeff*lowest_mse_loss + ce_coeff*ce_loss + ent_coeff*ent_loss
         loss = loss.mean()  # Finally, aggregate over batch
 
         ce_cost += ce_loss.detach().mean()
@@ -113,21 +114,21 @@ def calibrate_predictor(dataloader, model, policy_model, lambdas, num_cal, traj_
         for batch_dict in dataloader_tqdm:
             cnt += 1
 
-            batch_X = batch_dict["obs_history"].cuda()
-            batch_y = batch_dict["human_state_gt"].cuda()
-            robot_state_gt = batch_dict["robot_state_gt"]
-            batch_z = batch_dict["intent_gt"].cuda()
+            batch_X = batch_dict["obs_full"].cuda()
+            batch_z = batch_dict["intent_full"].cuda()
+            batch_pos = batch_dict["human_full_traj"].cuda()
             batch_size = batch_X.shape[0]
 
-            batch_end_ind = batch_start_ind + robot_state_gt.shape[0]
+            batch_end_ind = batch_start_ind + batch_X.shape[0]
 
-            traj_len = batch_y.shape[1]
-            traj_windows = torch.arange(10, traj_len, predict_step_interval)
+            traj_len = batch_X.shape[1]
+            traj_windows = torch.arange(predict_step_interval, traj_len, predict_step_interval)
 
             for t, endpoint in enumerate(traj_windows):
                 input_t = batch_X[:, :endpoint]
                 label = batch_z[:, endpoint-1].long()
-                y_pred, y_weight = model(input_t)
+                input_human_pos = batch_pos[:, :endpoint]
+                y_pred, y_weight = model(input_t, input_human_pos)
                 y_weight = y_weight.softmax(dim=-1)
                 action_set = torch.zeros((batch_size, num_intent)).cuda()
                 for intent in range(5):

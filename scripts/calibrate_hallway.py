@@ -47,6 +47,7 @@ def plot_figures(non_conformity_score, qhat, is_bullet=False, save_fig=False):
     plt.title(
         'Histogram of non-comformity scores in the calibration set'
     )
+    plt.xlim((0, 1))
     plt.xlabel('Non-comformity score')
     plt.legend()
     if not is_bullet:
@@ -73,6 +74,7 @@ def plot_nonsingleton_figure(lambdas, prediction_set_size, alpha=0.15, is_bullet
     )
     plt.xlabel('Prediction Set Threshold')
     plt.legend()
+    plt.axis((0, 1, 0, 1))
     if not is_bullet:
         name = 'hallway_set_size.png'
     else:
@@ -97,7 +99,9 @@ def plot_miscoverage_figure(lambdas, miscoverage_rate, alpha=0.15, is_bullet=Fal
         'Miscoverage Rate versus Prediction Threshold'
     )
     plt.xlabel('Threshold')
+    plt.axis((0, 1, 0, 1))
     plt.legend()
+
     if not is_bullet:
         name = 'hallway_set_size.png'
     else:

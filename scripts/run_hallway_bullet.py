@@ -147,6 +147,7 @@ def run():
     print("Starting training...")
     best_mean_reward = -np.Inf
     for iter in range(n_iters):
+        record_video(videnv, model, video_length=video_length, num_videos=10)
         if log_history:
             evaluate_policy(model=model, env=env, n_eval_episodes=n_eval_episodes)
         else:
