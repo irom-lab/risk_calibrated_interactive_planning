@@ -36,8 +36,17 @@ def encode_image(image_path):
 def extract_probs(response):
     response_str = response.json()["choices"][0]["message"]["content"]
     print(response_str)
-    probs = re.findall(r"[-+]?(?:\d*\.*\d+)%", response_str)
-    probs = np.array([int(x.split('%')[0]) for x in probs])
+    response_parsed = response_str.splitlines()
+    print(response_parsed)
+    probs = []
+    for line in response_parsed:
+        if ':' not in line:
+            continue
+        prob = int(re.search(r'\d+', line).group())
+        probs.append(prob)
+    print(probs)
+    # probs = re.findall(r"[-+]?(?:\d*\.*\d+)%", response_str)
+    # probs = np.array([int(x.split('%')[0]) for x in probs])
     return probs
 
 def response_pre_check(response, desired_len=5):

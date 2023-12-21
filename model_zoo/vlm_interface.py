@@ -20,10 +20,39 @@ from utils.vlm_utils import timeout, encode_image, response_pre_check
 openai_api_key = "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"  # Justin's key
 openai.api_key = openai_api_key
 
+prob_bins = list(np.arange(0, 101, 20))
 
-def make_payload(prompt, max_tokens, seed, image_path):
-    image_paths = sorted(os.listdir(image_path))
-    image_paths = [os.path.join(image_path, p) for p in image_paths]
+prompt_pre = f"Here is an image of a collection of wooden blocks, shorted by: shape, color, or size. \n " \
+    + f"For each labeled group, choose an approximate numerical probability {prob_bins} for each sorting method: "
+
+prompt_suffix = "Give your response as a list organized by each letter. If shapes, sizes, and colors are only slightly different, treat them as identical. "
+
+def next_alpha(s):
+    return chr((ord(s.upper())+1 - 65) % 26 + 65)
+
+def gen_prompt_qa(num_groups=4, sorting_types=["shape", "color", "size"]):
+
+    strs = []
+    alpha_ids = []
+    alpha = "A"
+    for g in range(num_groups):
+        sg = str(g+1)
+        for st in sorting_types:
+            new_s = f"({alpha}): Group {sg} by {st}"
+            strs.append(new_s)
+            alpha = next_alpha(alpha)
+            alpha_ids.append(sg)
+    return strs, alpha_ids
+
+
+
+
+def make_payload(prompt, max_tokens, seed, image_path, is_dir=True):
+    if is_dir:
+        image_paths = sorted(os.listdir(image_path))
+        image_paths = [os.path.join(image_path, p) for p in image_paths]
+    else:
+        image_paths  = [image_path]
     base64_images = [encode_image(path) for path in image_paths]
     content_message = {"type": "text", "text": prompt}
 
@@ -49,8 +78,8 @@ def make_payload(prompt, max_tokens, seed, image_path):
             }
         ],
         "max_tokens": max_tokens,
-        # "temperature": 0,
-        # "seed": seed
+        "temperature": 0,
+        "seed": seed
     }
     return payload
 
@@ -63,19 +92,21 @@ def vlm(prompt,
        temperature=0,
        seed=1234,
        timeout_seconds=30,
-       max_attempts=10):
+       max_attempts=10,
+       intent_set_size=12,
+       is_dir=True):
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {openai_api_key}"
     }
-    payload = make_payload(prompt, max_tokens, seed, image_path)
+    payload = make_payload(prompt, max_tokens, seed, image_path, is_dir)
     for _ in range(max_attempts):
         try:
             with timeout(seconds=timeout_seconds):
 
                 response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
 
-                if not response_pre_check(response):
+                if not response_pre_check(response, intent_set_size):
                     raise ValueError(f"Probability list had unexpected shape. Check message.")
             break
         except:
@@ -83,17 +114,21 @@ def vlm(prompt,
             pass
     return response
 
-def hallway_parse_response(response):
+def parse_response(response):
     response_str = response.json()["choices"][0]["message"]["content"]
     print(response_str)
     probs = re.findall(r"[-+]?(?:\d*\.*\d+)%", response_str)
-    probs = [float(x.split('%')[0]) for x in probs]
+    probs = [float(x.split(':')[0]) for x in probs]
     return np.array(probs)
 
 if __name__ == "__main__":
     home = expanduser("~")
-    image_path = os.path.join(home, 'PredictiveRL/try.png')
+    image_path = os.path.join(home, 'PredictiveRL/franka_img_test/blocks.png')
+    qa, alpha_ids = gen_prompt_qa()
+    qa_str = '\n'.join(qa)
+    prompt_full = prompt_pre + "\n" + qa_str + " \n" + prompt_suffix
+    print(prompt_full)
 
-    response = vlm(prompt, image_path, max_tokens=300, seed=1234)
-    probs = hallway_parse_response(response)
+    response = vlm(prompt_full, image_path, max_tokens=300, seed=1234, is_dir=False, intent_set_size=12)
+    probs = parse_response(response)
     print(probs)
