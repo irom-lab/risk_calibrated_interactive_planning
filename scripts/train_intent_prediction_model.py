@@ -53,6 +53,11 @@ def run():
     parser.add_argument('--calibration-interval', type=int, default=5)
     parser.add_argument('--validation-interval', type=int, default=5)
     parser.add_argument('--calibration-set-size', type=int, default=500)
+    parser.add_argument('--use-habitat', type=str2bool, default=False)
+    parser.add_argument('--habitat-csv-dir', type=str, default=None)
+    parser.add_argument('--traj-len', type=int, default=200)
+    parser.add_argument('--num-intent', type=int, default=5)
+    parser.add_argument('--traj-input-dim', type=int, default=121)
 
 
     node = platform.node()
@@ -91,6 +96,9 @@ def run():
     validation_interval = args["validation_interval"]
     calibration_set_size = args["calibration_set_size"]
     entropy_coeff = args["entropy_coeff"]
+    use_habitat = args["use_habitat"]
+    num_intent= args["num_intent"]
+    traj_input_dim = args["traj_input_dim"]
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -107,7 +115,10 @@ def run():
     n_iters = 100000
     video_length = max_steps
 
-    eval_policy = PPO.load(counterfactual_policy_load_path, device="cuda")
+    if use_habitat:
+        eval_policy = PPO.load(counterfactual_policy_load_path, device="cuda")
+    else:
+        eval_policy = None
 
     mse_loss = torch.nn.MSELoss(reduction='none')
     CE_loss = torch.nn.CrossEntropyLoss(reduction='none')
@@ -115,6 +126,8 @@ def run():
     home = expanduser("~")
     logdir = os.path.join(home, f"PredictiveRL/models/predictor_{rollout_num}/")
     csv_dir = f"/home/jlidard/PredictiveRL/logs/{rollout_num}/rollouts"
+    if use_habitat:
+        csv_dir = args["habitat_csv_dir"]
 
     os.makedirs(logdir, exist_ok=True)
 
@@ -132,14 +145,14 @@ def run():
     )
 
 
-    params = {"traj_input_dim": 121,
+    params = {"traj_input_dim": traj_input_dim,
               "num_hiddens": num_hiddens,
               "n_head": n_head,
               "num_transformer_encoder_layers": nlayer,
               "num_transformer_decoder_layers": nlayer,
               "coord_dim": coord_dim,
               "out_coord_dim": 2,
-              "num_intent_modes": 5}
+              "num_intent_modes": num_intent}
 
     learning_rate = 1e-4
     max_epochs = 30
@@ -147,11 +160,17 @@ def run():
     diff_order = 1
     hidden_size = hdim
     num_layers = nlayer
-    traj_len = 200
+    traj_len = args["traj_len"]
 
-    train_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=True, max_pred=future_horizon, debug=debug, min_len=min_traj_len)
-    test_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False, max_pred=future_horizon, debug=debug, min_len=min_traj_len)
-    cal_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False, max_pred=future_horizon, debug=debug, min_len=min_traj_len, max_in_set=calibration_set_size)
+    train_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=True,
+                                       max_pred=future_horizon, debug=debug, min_len=min_traj_len,
+                                       use_habitat=use_habitat)
+    test_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False,
+                                      max_pred=future_horizon,  debug=debug, min_len=min_traj_len,
+                                      use_habitat=use_habitat)
+    cal_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False,
+                                     max_pred=future_horizon, debug=debug, min_len=min_traj_len,
+                                     max_in_set=calibration_set_size, use_habitat=use_habitat)
 
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
     test_loader = DataLoader(test_ds, batch_size=val_batch_size, shuffle=True, collate_fn=collate_fn)
@@ -194,7 +213,8 @@ def run():
                                                                     lambda_values,
                                                                     num_cal=num_cal,
                                                                     traj_len=traj_len,
-                                                                    predict_step_interval=min_traj_len)
+                                                                    predict_step_interval=min_traj_len,
+                                                                    num_intent=num_intent)
             data_dict.update(risk_metrics)
             for k, img in calibration_img.items():
                 data_dict[k] = wandb.Image(img)

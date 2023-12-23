@@ -14,7 +14,7 @@ from environments.pybullet_hallway_env import BulletHallwayEnv, prompt
 from os.path import expanduser
 import wandb
 from wandb_osh.hooks import TriggerWandbSyncHook
-from model_zoo.vlm_interface import vlm, hallway_parse_response
+from model_zoo.vlm_interface import vlm
 from scipy.stats import binom
 from utils.visualization_utils import get_img_from_fig
 import torch

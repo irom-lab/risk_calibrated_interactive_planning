@@ -12,7 +12,8 @@ def entropy(probs):
     return ent
 
 
-def get_epoch_cost(dataloader, optimizer, scheduler, my_model, mse_loss, CE_loss, traj_len, min_len, max_pred, train=True, mse_coeff=1, ce_coeff=100, ent_coeff=0.0):
+def get_epoch_cost(dataloader, optimizer, scheduler, my_model, mse_loss, CE_loss, traj_len, min_len, max_pred,
+                   train=True, mse_coeff=1, ce_coeff=100, ent_coeff=0.0, use_habitat=False):
     total_cost = 0
     ce_cost = 0
     mse_cost = 0
@@ -98,7 +99,7 @@ def make_obs_dict_hallway(obs, intent, intent_index):
 
 
 def calibrate_predictor(dataloader, model, policy_model, lambdas, num_cal, traj_len=100, predict_step_interval=10,
-                        num_intent=5, epsilon=0.15, alpha0=0.15, alpha1=0.15, equal_action_mask_dist=0.05):
+                        num_intent=5, epsilon=0.15, alpha0=0.15, alpha1=0.15, equal_action_mask_dist=0.05, use_habitat=False):
 
     cnt = 0
     num_lambdas = len(lambdas)
@@ -118,6 +119,7 @@ def calibrate_predictor(dataloader, model, policy_model, lambdas, num_cal, traj_
             batch_X = batch_dict["obs_full"].cuda()
             batch_z = batch_dict["intent_full"].cuda()
             batch_pos = batch_dict["human_full_traj"].cuda()
+            actions = batch_dict["all_actions"].cuda()
             batch_size = batch_X.shape[0]
 
             batch_end_ind = batch_start_ind + batch_X.shape[0]
@@ -131,15 +133,17 @@ def calibrate_predictor(dataloader, model, policy_model, lambdas, num_cal, traj_
                 input_human_pos = batch_pos[:, :endpoint]
                 y_pred, y_weight = model(input_t, input_human_pos)
                 y_weight = y_weight.softmax(dim=-1)
-                action_set = torch.zeros((batch_size, num_intent)).cuda()
+                action_set = torch.zeros((batch_size, num_intent, 2)).cuda()
                 for intent in range(5):
                     label_tmp = (intent)*torch.ones_like(label)[:, None]
-                    obs_dict_tmp = make_obs_dict_hallway(input_t, label_tmp, intent)
-                    counterfactual_action, _ = policy_model.predict(obs_dict_tmp)
-                    action_set[:, intent] = torch.Tensor(counterfactual_action[:, 0]).cuda()
-                optimal_action = torch.gather(action_set, -1, label[:, None])
-                equal_action_mask = (optimal_action - action_set)**2
-                equal_action_mask = equal_action_mask.sqrt()
+                    if use_habitat:
+                        counterfactual_action = actions[:, t]
+                    else:
+                        obs_dict_tmp = make_obs_dict_hallway(input_t, label_tmp, intent)
+                        counterfactual_action, _ = policy_model.predict(obs_dict_tmp)
+                    action_set[:, intent] = torch.Tensor(counterfactual_action).cuda()
+                optimal_action = torch.gather(action_set, 1, label[:, None, None].repeat(1, 1, 2))
+                equal_action_mask = torch.norm(optimal_action - action_set, dim=-1)
                 equal_action_mask = equal_action_mask <= equal_action_mask_dist
                 action_set_probs = y_weight * equal_action_mask
                 true_label_smx = action_set_probs.sum(-1) # torch.gather(probs, -1, label[:, None])
