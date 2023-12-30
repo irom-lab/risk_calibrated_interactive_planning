@@ -26,7 +26,7 @@ prob_bins = list(np.arange(0, 101, 20))
 prompt_pre = f"Here is an image of a collection of wooden blocks, sorted by: shape, color, or size. \n " \
     + f"For each labeled group, choose an approximate numerical probability {prob_bins} for each sorting method: "
 
-prompt_suffix = "Give your response as a list organized by each letter. If shapes, sizes, and colors are only slightly different, treat them as identical. "
+prompt_suffix = "Give your response as a list organized by each letter. If shapes, sizes, and colors are only slightly different, treat them as identical. Please format the list as follows: \"(A): 100 (or whatever calculated probability) \n (B): 40 \n etc.\". In your response, please print the list and only the list with no extra information."
 
 def next_alpha(s):
     return chr((ord(s.upper())+1 - 65) % 26 + 65)
@@ -113,6 +113,7 @@ def vlm(prompt,
         except:
             print('Invalid response, retrying...')
             pass
+
     return response
 
 def parse_response(response):
@@ -125,7 +126,12 @@ def parse_response(response):
 if __name__ == "__main__":
     home = expanduser("~")
     # image_path = os.path.join(home, 'PredictiveRL/franka_img_test/blocks.png')
-    image_path = os.path.join(home, 'Downloads/Princeton/F2023/SeniorThesis/PredictiveRL/franka_img_test/blocks.png')
+
+    # Windows
+    # image_path = os.path.join(home, 'Downloads/Princeton/F2023/SeniorThesis/PredictiveRL/franka_img_test/blocks.png')
+
+    # Linux
+    image_path = "/mnt/c/Users/Ariel/Downloads/Princeton/F2023/SeniorThesis/PredictiveRL/franka_img_test/blocks.png"
     qa, alpha_ids = gen_prompt_qa()
     qa_str = '\n'.join(qa)
     prompt_full = prompt_pre + "\n" + qa_str + " \n" + prompt_suffix
