@@ -21,31 +21,7 @@ from utils.vlm_utils import timeout, encode_image, response_pre_check
 openai_api_key = "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"  # Ariel's key
 openai.api_key = openai_api_key
 
-prob_bins = list(np.arange(0, 101, 20))
-
-prompt_pre = f"Here is an image of a collection of wooden blocks, sorted by: shape, color, or size. \n " \
-    + f"For each labeled group, choose an approximate numerical probability {prob_bins} for each sorting method: "
-
-prompt_suffix = "Give your response as a list organized by each letter. If shapes, sizes, and colors are only slightly different, treat them as identical."
-
-def next_alpha(s):
-    return chr((ord(s.upper())+1 - 65) % 26 + 65)
-
-def gen_prompt_qa(num_groups=4, sorting_types=["shape", "color", "size"]):
-
-    strs = []
-    alpha_ids = []
-    alpha = "A"
-    for g in range(num_groups):
-        sg = str(g+1)
-        for st in sorting_types:
-            new_s = f"({alpha}): Group {sg} by {st}"
-            strs.append(new_s)
-            alpha = next_alpha(alpha)
-            alpha_ids.append(sg)
-    return strs, alpha_ids
-
-
+prompt = "Write me a poem."
 
 
 def make_payload(prompt, max_tokens, seed, image_path, is_dir=True):
@@ -133,10 +109,11 @@ if __name__ == "__main__":
 
     # Linux
     image_path = "/mnt/c/Users/Ariel/Downloads/Princeton/F2023/SeniorThesis/PredictiveRL/franka_img_test/blocks.png"
-    qa, alpha_ids = gen_prompt_qa()
-    qa_str = '\n'.join(qa)
-    prompt_full = prompt_pre + "\n" + qa_str + " \n" + prompt_suffix
-    print(prompt_full)
+    # qa, alpha_ids = gen_prompt_qa()
+    # qa_str = '\n'.join(qa)
+    # prompt_full = prompt_pre + "\n" + qa_str + " \n" + prompt_suffix
+    # print(prompt_full)
+    prompt_full = "Write me a poem please."
 
     response = vlm(prompt_full, image_path, max_tokens=300, seed=1234, is_dir=False, intent_set_size=12)
     probs = parse_response(response)
