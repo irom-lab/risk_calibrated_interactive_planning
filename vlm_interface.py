@@ -14,19 +14,21 @@ from os.path import expanduser
 import base64
 import requests
 
-from utils.vlm_utils import timeout, encode_image, response_pre_check
+from utils.vlm_utils import timeout, encode_image, response_pre_check, extract_probs
 
 # Set OpenAI API key.
 # openai_api_key = "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"  # Justin's key
 openai_api_key = "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"  # Ariel's key
 openai.api_key = openai_api_key
 
-prob_bins = list(np.arange(0, 101, 20))
+prob_bins = list(np.arange(0, 101, 10))
 
 prompt_pre = f"Here is an image of a collection of wooden blocks, sorted by: shape, color, or size. \n " \
     + f"For each labeled group, choose an approximate numerical probability {prob_bins} for each sorting method: "
 
-prompt_suffix = "Give your response as a list organized by each letter. If shapes, sizes, and colors are only slightly different, treat them as identical."
+prompt_suffix = "Give your response as a list organized by each letter. If shapes, sizes, and colors are only slightly different, treat them as identical. Please return the list in the following format: \n [probability for method (A)] \n [probability for method (B)] \n [probability for method (C)] \n etc. Please print the list and only the list."
+# prompt_suffix = "Give your response as a list organized by each letter. If shapes, sizes, and colors are only slightly different, treat them as identical. "
+prompt_suffix = "Give your response as a list separated by newlines."
 
 def next_alpha(s):
     return chr((ord(s.upper())+1 - 65) % 26 + 65)
@@ -119,8 +121,11 @@ def vlm(prompt,
 
 def parse_response(response):
     response_str = response.json()["choices"][0]["message"]["content"]
+    print("parse response response string")
     print(response_str)
     probs = re.findall(r"[-+]?(?:\d*\.*\d+)%", response_str)
+    print("parse response probs")
+    print(probs)
     probs = [float(x.split(':')[0]) for x in probs]
     return np.array(probs)
 
@@ -132,12 +137,14 @@ if __name__ == "__main__":
     # image_path = os.path.join(home, 'Downloads/Princeton/F2023/SeniorThesis/PredictiveRL/franka_img_test/blocks.png')
 
     # Linux
-    image_path = "/mnt/c/Users/Ariel/Downloads/Princeton/F2023/SeniorThesis/PredictiveRL/franka_img_test/blocks.png"
+    image_path = "/mnt/c/Users/Ariel/Downloads/Princeton/F2023/SeniorThesis/PredictiveRL/franka_img_test/blocks_with_circles.png"
     qa, alpha_ids = gen_prompt_qa()
     qa_str = '\n'.join(qa)
     prompt_full = prompt_pre + "\n" + qa_str + " \n" + prompt_suffix
     print(prompt_full)
 
     response = vlm(prompt_full, image_path, max_tokens=300, seed=1234, is_dir=False, intent_set_size=12)
-    probs = parse_response(response)
-    print(probs)
+    # probs = parse_response(response) # prints response.json()["choices"][0]["message"]["content"]
+    probs = extract_probs(response)
+    print("probs")
+    print(probs) # prints array of probabilities
