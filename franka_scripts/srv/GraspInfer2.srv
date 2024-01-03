@@ -1,0 +1,5 @@
+---
+geometry_msgs/Vector3 pos1
+geometry_msgs/Vector3 pos2
+float64 yaw
+ 

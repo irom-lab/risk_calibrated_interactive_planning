@@ -1,0 +1,4 @@
+---
+geometry_msgs/Vector3 pos
+float64 yaw
+float64[] image

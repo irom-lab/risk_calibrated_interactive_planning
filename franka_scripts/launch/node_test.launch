@@ -1,0 +1,12 @@
+<?xml version="1.0" ?>
+<launch>
+
+	<!-- High-level commands -->
+  	<node name="node_three" pkg="franka_irom" type="node_three.py" output="screen"/>
+
+    	<node name="node_two" pkg="franka_irom" type="node_two.py" output="screen"/>
+
+    	<node name="node_one" pkg="franka_irom" type="node_one.py" output="screen"/>
+
+	
+</launch>
