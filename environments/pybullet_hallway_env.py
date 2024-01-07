@@ -19,6 +19,10 @@ from pybullet_utils import bullet_client as bc
 import pybullet_data
 from pkg_resources import parse_version
 
+from utils.baseline_utils import simple_set, no_help, top_k, nonsingleton_risk, miscoverage_risk, prediction_set_size
+import torch
+from utils.baseline_utils import RiskEvaluator
+
 LEFT_BOUNDARY = -7
 RIGHT_BOUNDARY = 7
 UPPER_BOUNDARY = 4.5
@@ -164,7 +168,8 @@ class BulletHallwayEnv(gym.Env):
     def __init__(self, render=False, state_dim=6, obs_seq_len=10, max_turning_rate=3, deterministic_intent=None,
                  debug=False, render_mode="rgb_array", time_limit=100, rgb_observation=False,
                  urdfRoot=pybullet_data.getDataPath(), show_intent=True, history_log_path=None, discrete_action=True,
-                 hide_intent=False, intent_predictor=None, eval_policy=None):
+                 hide_intent=False, intent_predictor=None, eval_policy=None, threshold_values=None,
+                 epsilon_values=None, threshold_values_knowno=None):
         super(BulletHallwayEnv, self).__init__()
         self.discrete_action_space = discrete_action
         self.show_intent = show_intent
@@ -177,6 +182,7 @@ class BulletHallwayEnv(gym.Env):
         self.cam_targ = [0, 0, 0]
         self.hide_intent = hide_intent
         self.intent_predictor = intent_predictor
+        self.risk_evaluator = None
         self.eval_policy = eval_policy
 
         if render:
@@ -245,6 +251,8 @@ class BulletHallwayEnv(gym.Env):
         self.prev_robot_hallway_dist = 0
         self.robot_best_hallway_initial = None
         self.human_reached = self.robot_reached = False
+        self.predict_interval = 20
+        self.total_metrics = {}
 
         # Load assets
         self.p.setGravity(0, 0, -9.8)
@@ -312,6 +320,10 @@ class BulletHallwayEnv(gym.Env):
         self.tid = []
         self.rollout_counter = 0
 
+        self.threshold_values = threshold_values
+        self.threshold_values_knowno = threshold_values_knowno
+        self.epsilon_values = epsilon_values
+
     def set_policy_model(self, policy):
         self.eval_policy = policy
 
@@ -333,11 +345,11 @@ class BulletHallwayEnv(gym.Env):
         self.prev_dist_robot = self.dist_robot
         self.prev_dist_human = self.dist_human
 
-        if self.log_history:
+        if self.log_history or self.hide_intent:
             # all_actions = self.get_all_counterfactual_actions()
-            self.append_state_history(self.prev_obs, action)
+            self.append_state_history(self.prev_obs, action, human_pos=self.human_state[:2])
             self.prev_obs = self.get_all_counterfactual_observations()
-            if self.truncated:
+            if self.truncated and not self.hide_intent:
                 self.save_state_history()
             elif self.done and not self.truncated:
                 self.reset_state_history()
@@ -364,19 +376,18 @@ class BulletHallwayEnv(gym.Env):
             new_action[i] = new_a
         return new_action
 
-    def infer_intent(self, prev_obs):
-        predictor_input = prev_obs["obs"] # todo: map to input shape
-        prediction, weights = self.intent_predictor(predictor_input)
-        return prediction, weights
+    def get_metrics(self):
+        return self.risk_evaluator.total_metrics
 
-    def compute_state_transition(self, action, infer_intent=False):
+
+    def compute_state_transition(self, action):
         action_scale = 1/3
         action_offset = -2
         agent_0_vel = action_offset  #+action[2]
         agent_1_vel = action_offset  #+action[3]
         mapped_action = self.map_discrete_to_continuous(action)
-        if self.hide_intent:
-            intent, confidence = self.infer_intent(self.prev_obs)
+        if self.hide_intent and len(self.observation_history) > 0 and self.timesteps % self.predict_interval == 0:
+            intent, confidence = self.risk_evaluator.infer_intent(self.observation_history, self.human_pos_history, self.timesteps, self.cumulative_reward)
         else:
             intent = self.intent
         robot_action_turn = action_scale*mapped_action[0]
@@ -531,6 +542,10 @@ class BulletHallwayEnv(gym.Env):
     def reset(self, seed=1234, options={}):
 
         self.timesteps = 0
+        if self.intent_predictor is not None:
+            self.risk_evaluator = RiskEvaluator(self.intent, self.intent_predictor, self.threshold_values,
+                                                self.epsilon_values, self.threshold_values_knowno,
+                                                self.predict_interval, self.time_limit)
         self.reset_state_history()
         self.human_reached = self.robot_reached = False
         # if self.human is not None and self.robot is not None:
@@ -751,9 +766,10 @@ class BulletHallwayEnv(gym.Env):
         df.to_csv(save_path)
         self.reset_state_history()
 
-    def append_state_history(self, observation, action):
+    def append_state_history(self, observation, action, human_pos):
         # self.robot_state_history.append(self.robot_state)
         # self.human_state_history.append(self.human_state)
+        self.human_pos_history.append(human_pos)
         self.observation_history.append(observation)
         self.action_history.append(action)
         self.intent_history.append(self.intent)
@@ -761,6 +777,7 @@ class BulletHallwayEnv(gym.Env):
     def reset_state_history(self):
         # self.robot_state_history = []
         # self.human_state_history = []
+        self.human_pos_history = []
         self.observation_history = []
         self.intent_history = []
         self.action_history = []

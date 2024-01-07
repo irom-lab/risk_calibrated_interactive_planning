@@ -22,9 +22,27 @@ from PIL import Image
 
 from utils.visualization_utils import plot_pred, get_img_from_fig
 
-from utils.intent_dataset import IntentPredictionDataset, collate_fn
+from utils.intent_dataset import IntentPredictionDataset, collate_fn, collate_fn_stack_only
 from utils.training_utils import get_epoch_cost, calibrate_predictor
 from model_zoo.intent_transformer import IntentFormer
+
+def get_params(traj_input_dim, num_intent):
+
+    coord_dim = 3
+    num_hiddens = 3
+    n_head = 8
+    nlayer = 6
+
+    params = {"traj_input_dim": traj_input_dim,
+              "num_hiddens": num_hiddens,
+              "n_head": n_head,
+              "num_transformer_encoder_layers": nlayer,
+              "num_transformer_decoder_layers": nlayer,
+              "coord_dim": coord_dim,
+              "out_coord_dim": 2,
+              "num_intent_modes": num_intent}
+
+    return params
 
 def run():
 
@@ -54,6 +72,7 @@ def run():
     parser.add_argument('--validation-interval', type=int, default=5)
     parser.add_argument('--calibration-set-size', type=int, default=500)
     parser.add_argument('--use-habitat', type=str2bool, default=False)
+    parser.add_argument('--use-vlm', type=str2bool, default=False)
     parser.add_argument('--habitat-csv-dir', type=str, default=None)
     parser.add_argument('--traj-len', type=int, default=200)
     parser.add_argument('--num-intent', type=int, default=5)
@@ -97,8 +116,12 @@ def run():
     calibration_set_size = args["calibration_set_size"]
     entropy_coeff = args["entropy_coeff"]
     use_habitat = args["use_habitat"]
+    use_vlm = args["use_vlm"]
     num_intent= args["num_intent"]
-    traj_input_dim = args["traj_input_dim"]
+    if use_habitat:
+        traj_input_dim = 200 # args["traj_input_dim"]
+    else:
+        traj_input_dim = 121
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -115,7 +138,7 @@ def run():
     n_iters = 100000
     video_length = max_steps
 
-    if use_habitat:
+    if not use_habitat and not use_vlm:
         eval_policy = PPO.load(counterfactual_policy_load_path, device="cuda")
     else:
         eval_policy = None
@@ -128,57 +151,88 @@ def run():
     csv_dir = f"/home/jlidard/PredictiveRL/logs/{rollout_num}/rollouts"
     if use_habitat:
         csv_dir = args["habitat_csv_dir"]
+    if use_vlm:
+        csv_dir = args["vlm_csv_dir"]
 
     os.makedirs(logdir, exist_ok=True)
-
-    hdim = 256
-    future_horizon = max_pred_len
-    num_segments = 1
-    coord_dim = 3
-    num_hiddens = 3
-    n_head = 8
-    nlayer = 6
 
     wandb.init(
         project="conformal_rl_prediction",
         mode="online" if not offline else "offline"
     )
 
-
-    params = {"traj_input_dim": traj_input_dim,
-              "num_hiddens": num_hiddens,
-              "n_head": n_head,
-              "num_transformer_encoder_layers": nlayer,
-              "num_transformer_decoder_layers": nlayer,
-              "coord_dim": coord_dim,
-              "out_coord_dim": 2,
-              "num_intent_modes": num_intent}
-
+    hdim = 256
+    future_horizon = max_pred_len
+    num_segments = 1
+    params = get_params(traj_input_dim, num_intent)
     learning_rate = 1e-4
     max_epochs = 30
     output_len = future_horizon
     diff_order = 1
     hidden_size = hdim
-    num_layers = nlayer
     traj_len = args["traj_len"]
+    epsilons = np.arange(0.01, .25, 0.1)
+    alpha0s = epsilons
+    alpha1s = np.arange(0.01, .25, 0.1)
 
     train_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=True,
                                        max_pred=future_horizon, debug=debug, min_len=min_traj_len,
-                                       use_habitat=use_habitat)
+                                       use_habitat=use_habitat, use_vlm=use_vlm)
     test_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False,
                                       max_pred=future_horizon,  debug=debug, min_len=min_traj_len,
-                                      use_habitat=use_habitat)
+                                      use_habitat=use_habitat, use_vlm=use_vlm)
     cal_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False,
                                      max_pred=future_horizon, debug=debug, min_len=min_traj_len,
-                                     max_in_set=calibration_set_size, use_habitat=use_habitat)
+                                     max_in_set=calibration_set_size, use_habitat=use_habitat, use_vlm=use_vlm)
+    cal_ds_test = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False,
+                                     max_pred=future_horizon, debug=debug, min_len=min_traj_len,
+                                     max_in_set=calibration_set_size, use_habitat=use_habitat, use_vlm=use_vlm, calibration_offset=calibration_set_size)
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
-    test_loader = DataLoader(test_ds, batch_size=val_batch_size, shuffle=True, collate_fn=collate_fn)
-    cal_loader = DataLoader(cal_ds, batch_size=val_batch_size, shuffle=True, collate_fn=collate_fn)
+    if use_vlm:
+        collate_dict = collate_fn_stack_only
+    else:
+        collate_dict = collate_fn
+
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=collate_dict)
+    test_loader = DataLoader(test_ds, batch_size=val_batch_size, shuffle=True, collate_fn=collate_dict)
+    cal_loader = DataLoader(cal_ds, batch_size=val_batch_size, shuffle=True, collate_fn=collate_dict)
+    cal_loader_test = DataLoader(cal_ds_test, batch_size=val_batch_size, shuffle=True, collate_fn=collate_dict)
+    num_cal = cal_ds.__len__()
+
+    num_thresh = 100
+    lambda_interval = 1 / num_thresh
+    lambda_values = np.arange(0, 1, lambda_interval)
+    if use_vlm:
+        # Only need to do a single iteration, since model is static
+
+        data_dict = {}
+        risk_metrics, calibration_img = calibrate_predictor(cal_loader,
+                                                            None,
+                                                            eval_policy,
+                                                            lambda_values,
+                                                            num_cal=num_cal,
+                                                            traj_len=traj_len,
+                                                            predict_step_interval=min_traj_len,
+                                                            num_intent=num_intent,
+                                                            epsilons=epsilons,
+                                                            alpha0s=alpha0s,
+                                                            alpha1s=alpha1s)
+        data_dict.update(risk_metrics)
+        for k, img in calibration_img.items():
+            data_dict[k] = wandb.Image(img)
+        wandb.log(data_dict)
+        return
+
 
     my_model = IntentFormer(hdim, num_segments, future_horizon, params=params).cuda()
     # my_model = TransformerModel(len(input_cols), input_length, output_length=output_len)
     optimizer = optim.Adam(my_model.parameters(), lr=1e-4)
+    risk_evaluator = RiskEvaluator(self.intent, self.intent_predictor, self.threshold_values,
+                  self.epsilon_values, self.threshold_values_knowno,
+                  self.predict_interval, self.time_limit)
+
+
+
     def lr_lambda(epoch):
         decay_fracs = [1, 0.5, 0.25, 0.125, 0.125/2]
         epoch_drops = [0, 50, 80, 90, 100]
@@ -193,31 +247,52 @@ def run():
     lambda1 = lambda epoch: epoch // 30
     scheduler = LambdaLR(optimizer, lr_lambda=[lr_lambda])
 
-    num_thresh = 100
-    lambda_interval = 1 / num_thresh
+
+
     vis_interval = validation_interval
     num_epochs = 100000
-    num_cal = cal_ds.__len__()
     epochs = []
     train_losses = []
     test_losses = []
-    lambda_values = np.arange(0, 1, lambda_interval)
+
     for epoch in range(num_epochs):
         data_dict = {}
         my_model.train()
 
         if epoch % calibration_interval == 0:
-            risk_metrics, calibration_img = calibrate_predictor(cal_loader,
-                                                                    my_model,
-                                                                    eval_policy,
-                                                                    lambda_values,
-                                                                    num_cal=num_cal,
-                                                                    traj_len=traj_len,
-                                                                    predict_step_interval=min_traj_len,
-                                                                    num_intent=num_intent)
+            if deploy_predictor:
+                risk_metrics, calibration_img = calibrate_predictor(cal_loader,
+                                                                        my_model,
+                                                                        eval_policy,
+                                                                        lambda_values,
+                                                                        num_cal=num_cal,
+                                                                        traj_len=traj_len,
+                                                                        predict_step_interval=min_traj_len,
+                                                                        num_intent=num_intent,
+                                                                        use_habitat=use_habitat,
+                                                                        epsilons=epsilons,
+                                                                        alpha0s=alpha0s,
+                                                                        alpha1s=alpha1s)
+                for k, img in calibration_img.items():
+                    data_dict[k] = wandb.Image(img)
+                print("Saving model...")
+                torch.save(my_model.state_dict(), f"{logdir}epoch{epoch}.pth")
+                print("...done.")
+            else:
+                risk_metrics = deploy_predictor(cal_loader,
+                                                risk_evaluator,
+                                                lambda_values,
+                                                num_cal=num_cal,
+                                                traj_len=traj_len,
+                                                predict_step_interval=min_traj_len,
+                                                num_intent=num_intent,
+                                                use_habitat=use_habitat,
+                                                epsilons=epsilons,
+                                                alpha0s=alpha0s,
+                                                alpha1s=alpha1s)
             data_dict.update(risk_metrics)
-            for k, img in calibration_img.items():
-                data_dict[k] = wandb.Image(img)
+
+
         epoch_cost_train, _, train_stats = get_epoch_cost(train_loader, optimizer, scheduler, my_model,
                                                           mse_loss, CE_loss, traj_len, min_traj_len,
                                                           future_horizon, train=True, ent_coeff=entropy_coeff)
@@ -252,7 +327,7 @@ def run():
                   f"Train Loss: {epoch_cost_train:.4f}")
 
         # if epoch < 2 or test_losses[-1] < test_losses[-2]:
-        #     torch.save(my_model.state_dict(), f"{logdir}_epoch{epoch}.pth")
+        #
 
 if __name__ == "__main__":
     run()
