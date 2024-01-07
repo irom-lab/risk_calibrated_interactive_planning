@@ -68,9 +68,10 @@ NUM_INTENT_PILE = 5
 NUM_PILE = 5
 TOKENIZER_ABCDE_INDICES = [319, 350, 315, 360, 382]
 
+# + f"For the <group_id> group of objects, what colors, functions, names, and sizes do you see? " \
 prompt = f"Here is an image of a collection of common 3D shapes sorted by a human. \n " \
-    + "Each group can only be sorted by a single property (e.g. yellow and green objects don't work for property: color)." \
-    + f"For the <group_id> group of objects, explain the sorting method: \n" \
+    + "Each group can only be sorted by a single property." \
+    + "Select and explain which sorting method was used: \n" \
     + "A) Color \nB) Function \nC) Name  \nD) Size \nE) None of the above.\n " \
     + ". \n"
 
@@ -317,7 +318,7 @@ def get_intent_distribution_from_image(image_path, debug=False):
     parser.add_argument("--query", type=str, required=True)
     parser.add_argument("--conv-mode", type=str, default=None)
     parser.add_argument("--sep", type=str, default=",")
-    parser.add_argument("--temperature", type=float, default=0.75)
+    parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--top_p", type=float, default=None)
     parser.add_argument("--num_beams", type=int, default=1)
     parser.add_argument("--max_new_tokens", type=int, default=512)
