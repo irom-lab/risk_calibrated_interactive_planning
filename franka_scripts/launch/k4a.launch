@@ -1,0 +1,24 @@
+<launch>
+
+  <arg name="depth_enabled" default="true" />
+  <arg name="color_enabled" default="true" />
+  <arg name="point_cloud" default="true" />
+  <arg name="fps" default="30" />
+  <arg name="color_resolution" default="1080P" />
+
+  <include file="$(find azure_kinect_ros_driver)/launch/driver.launch">
+    <arg name="depth_enabled"           default="$(arg depth_enabled)" />           <!-- Enable or disable the depth camera -->
+    <arg name="depth_mode"              default="NFOV_UNBINNED" />  <!-- Set the depth camera mode, which affects FOV, depth range, and camera resolution. See Azure Kinect documentation for full details. Valid options: NFOV_UNBINNED, NFOV_2X2BINNED, WFOV_UNBINNED, WFOV_2X2BINNED, and PASSIVE_IR -->
+    <arg name="color_enabled"           default="$(arg color_enabled)" />           <!-- Enable or disable the color camera -->
+    <arg name="color_format"            default="bgra" />           <!-- The format of RGB camera. Valid options: bgra, jpeg -->
+    <arg name="color_resolution"        default="$(arg color_resolution)" />          <!-- Resolution at which to run the color camera. Valid options: 720P, 1080P, 1440P, 1536P, 2160P, 3072P -->
+    <arg name="fps"                     default="$(arg fps)" />              <!-- FPS to run both cameras at. Valid options are 5, 15, and 30 -->
+    <arg name="point_cloud"             default="$(arg point_cloud)" />           <!-- Generate a point cloud from depth data. Requires depth_enabled -->
+    <arg name="rgb_point_cloud"         default="false" />           <!-- Colorize the point cloud using the RBG camera. Requires color_enabled and depth_enabled -->
+    <arg name="point_cloud_in_depth_frame" default="false" />        <!-- Whether the RGB pointcloud is rendered in the depth frame (true) or RGB frame (false). Will either match the resolution of the depth camera (true) or the RGB camera (false). -->
+    <arg name="overwrite_robot_description" default="false" />         <!-- Flag to publish a standalone azure_description instead of the default robot_descrition parameter-->
+  </include>
+
+  <!-- <node type="rviz" name="rviz" pkg="rviz" /> -->
+
+</launch>

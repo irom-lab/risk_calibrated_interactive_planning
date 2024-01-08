@@ -1,0 +1,10 @@
+<?xml version="1.0" ?>
+<launch>
+	<arg name="recording_k4a" default="False" />
+
+	<!-- High-level commands -->
+	<node name="demo_move" pkg="franka_irom" type="demo_move.py" output="screen" args="$(arg recording_k4a)"/>
+
+	<!-- Querying object poses with camera images -->
+	<node name="demo_camera" pkg="franka_irom" type="demo_camera.py" output="screen"/>
+</launch>

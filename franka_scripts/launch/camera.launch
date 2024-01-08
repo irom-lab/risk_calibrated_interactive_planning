@@ -1,0 +1,4 @@
+<?xml version="1.0" ?>
+<launch>
+	<node name="camera" pkg="franka_irom" type="camera.py" output="screen"/>
+</launch>

@@ -1,0 +1,19 @@
+<?xml version="1.0" ?>
+<launch>
+	<arg name="num_trial" default="4" />
+	<arg name="recording_k4a" default="False" />
+	<arg name="recording_rs" default="False" />
+	<arg name="video_folder_prefix" default="" />
+
+	<node name="scoop" pkg="franka_irom" type="scoop.py" output="screen" args="$(arg num_trial) $(arg recording_rs) $(arg recording_k4a) $(arg video_folder_prefix)"/>
+
+	<!-- <node name="scoop_camera" pkg="franka_irom" type="scoop_camera_env.py" output="screen"/> -->
+
+	<group if="$(arg recording_rs)">
+		<node name="rs_record" pkg="franka_irom" type="rs_recorder.py" output="screen"/>
+	</group>
+	<group if="$(arg recording_k4a)">
+		<node name="k4a_record" pkg="franka_irom" type="k4a_recorder.py" output="screen"/>
+	</group>
+</launch>
+
