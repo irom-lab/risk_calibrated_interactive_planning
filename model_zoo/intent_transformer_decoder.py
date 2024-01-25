@@ -39,7 +39,7 @@ class IntentFormerDecoder(torch.nn.Module):
             )
 
 
-    def forward(self, input):
+    def forward(self, input, intent_points):
         """
         :param input: Tensor of shape [B, T, D], with T large
         :return:
@@ -50,7 +50,7 @@ class IntentFormerDecoder(torch.nn.Module):
         B, nseg, hidden_dim = input.shape
 
         memory = input
-        anchor_encoding = self.anchor_encoder_mlp(self.traj_anchors)
+        anchor_encoding = self.anchor_encoder_mlp(intent_points)
         tgt = anchor_encoding[None].repeat(B, 1, 1)
         for layer in self.transformer_decoder_layers:
             x = layer(tgt, memory)

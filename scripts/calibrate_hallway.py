@@ -14,10 +14,15 @@ from environments.pybullet_hallway_env import BulletHallwayEnv, prompt
 from os.path import expanduser
 import wandb
 from wandb_osh.hooks import TriggerWandbSyncHook
-from model_zoo.vlm_interface import vlm
-from scipy.stats import binom
+from scipy.stats import binom, beta
 from utils.visualization_utils import get_img_from_fig
 import torch
+import matplotlib
+from matplotlib.ticker import FormatStrFormatter
+
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from mpl_toolkits import axes_grid1
+
 
 trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
@@ -112,77 +117,222 @@ def plot_miscoverage_figure(lambdas, miscoverage_rate, alpha=0.15, is_bullet=Fal
 
     return get_img_from_fig(plt.gcf())
 
+def add_colorbar(im, aspect=20, pad_fraction=0.5, **kwargs):
+    """Add a vertical color bar to an image plot."""
+    divider = axes_grid1.make_axes_locatable(im.axes)
+    width = axes_grid1.axes_size.AxesY(im.axes, aspect=1./aspect)
+    pad = axes_grid1.axes_size.Fraction(pad_fraction, width)
+    current_ax = plt.gca()
+    cax = divider.append_axes("right", size=width, pad=pad)
+    plt.sca(current_ax)
+    return im.axes.figure.colorbar(im, cax=cax, **kwargs), cax
 
-def calibrate_hallway(env, model, n_cal=100, prediction_step_interval=10, image_obs=False):
+
+# Adjusting the function to remove the invalid property 'shrink'
+
+def label_with_arrow(ax, text, xy, xytext, arrowprops):
+    """
+    Adds a label with an arrow to the plot.
+    Args:
+    - ax: The axis object to add the label to.
+    - text (str): The text of the label.
+    - xy (tuple): The point (x, y) to point the arrow to.
+    - xytext (tuple): The position (x, y) to place the text at.
+    - arrowprops (dict): Properties for the arrow that points from the text to the point.
 
 
-    num_calibration = 1
-    context_list = []
-    label_list = []
-    for _ in range(num_calibration):
-        obs, _ = env.reset()
-        intent = np.random.choice(5)
-        env.seed_intent(HumanIntent(intent))
-        total_reward = 0
-        observation_list = []
-        done = False
-        i = 0
-        # rollout to a random timepoint
-        while not done:
-            action, _states = model.predict(obs, deterministic=True)
-            obs, rewards, done, trunc, info = env.step(action)
-            total_reward += rewards
-            if i % 10 == 0 and image_obs:
-                print(f"Total reward: {total_reward}")
-                if use_bullet:
-                    img_obs = env.render()
-                else:
-                    img_obs = env.render(resolution_scale=2)
-                observation = img_obs
-                observation_list.append(observation)
-            i += 1
-        context = np.stack(observation_list, 0)
-        context_list.append(context)
-        label_list.append(intent)  #TODO(justin.lidard): add dynamic intents
-    dataset = pd.DataFrame({"context": context_list, "label": label_list})
-    dataset.to_csv(dataframe_path)
+    """
 
-    # img = Image.fromarray(observation["obs"], 'RGB')
-    # img.save('try.png')
-    env.close()
-    non_conformity_score = []
-    prediction_set_size = {}
-    lambdas = np.arange(0, 1, 0.1)
-    for lam in lambdas:
-        prediction_set_size[lam] = []
-    image_path = f'/home/jlidard/PredictiveRL/language_img/'
-    for index, row in dataset.iterrows():
-        context = row[0]
-        label = row[1]
-        for k in range(context.shape[0]):
-            save_path = f'/home/jlidard/PredictiveRL/language_img/hallway_tmp{k}.png'
-            img = Image.fromarray(context[k])
-            img.save(save_path)
-        response = vlm(prompt=prompt, image_path=image_path) # response_str = response.json()["choices"][0]["message"]["content"]
-        probs = hallway_parse_response(response)
-        probs = probs/probs.sum()
-        true_label_smx = probs[label]
-        # extract probs
-        non_conformity_score.append(1 - true_label_smx)
-        for lam in lambdas:
-            pred_set = probs > lam
-            risk = 1 if pred_set.sum() > 1 else 0
-            prediction_set_size[lam].append(sum(pred_set))
+    # fig_xy = ax.figure.transFigure.transform_point(xy)
+    # # Transform the display coordinates to data coordinates
+    # inv = ax.transData.inverted()
+    # data_xy = inv.transform_point(fig_xy)
+    #
+    # fig_xytext = ax.figure.transFigure.transform_point(xytext)
+    # # Transform the display coordinates to data coordinates
+    # inv = ax.transData.inverted()
+    # data_xytext = inv.transform_point(fig_xytext)
 
-        if index % 25 == 0:
-            print(f"Done {index} of {num_calibration}.")
 
-    plot_risk_figures(prediction_set_size, is_bullet=True)
-    plot_figures(non_conformity_score, is_bullet=True)
+    ax.annotate(text, xy=xy, xytext=xytext, arrowprops=arrowprops, xycoords='subfigure fraction', textcoords='subfigure fraction')
+
+
+def plot_prediction_set_size_versus_success(prediction_set_size, task_success_rate, help_rate,
+                                            knowno_prediction_set_size, knowno_task_success_rate, knowno_help_rate,
+                                            simple_set_prediction_set_size, simple_set_task_success_rate, simple_set_help_rate,
+                                            entropy_set_prediction_set_size, entropy_set_task_success_rate, entropy_set_help_rate,
+                                            no_help_task_success_rate,
+                                            optimal_temperature, save_fig=True):
+
+    # plot histogram and quantile
+    f, (ax1, ax2) = plt.subplots(ncols=2, figsize=(32, 9))
+    ax1.plot(prediction_set_size, task_success_rate, label='RCIP', linewidth=3)
+    ax1.plot(knowno_prediction_set_size, knowno_task_success_rate, label='KnowNo', linewidth=3)
+    ax1.plot(simple_set_prediction_set_size, simple_set_task_success_rate, label='Simple Set', linewidth=3)
+    ax1.plot(entropy_set_prediction_set_size, entropy_set_task_success_rate, label='Entropy Set', linewidth=3)
+    ax1.set_ylabel('Task Success Rate')
+    ax1.set_xlabel('Prediction Set Size')
+    ax1.set_xlim([1, 5])
+    ax1.set_ylim([.6, 1])
+    major_ticks_x = [1, 2, 3, 4, 5]
+    major_ticks_y = [0.6, 0.7, 0.8, 0.9, 1.0]
+    ax1.set_xticks(major_ticks_x)
+    ax1.set_yticks(major_ticks_y)
+    label_with_arrow(ax1, r'lower $\alpha_2$', xy=(0.42, 0.5), xytext=(0.35, 0.3),
+                     arrowprops=dict(facecolor='black', arrowstyle='->', lw=3, linestyle='dashed'))
+
+    # label_with_arrow(ax1, 'lower ε', xy=(1, 0.9), xytext=(0.95, 0.8),
+    #                  arrowprops=dict(facecolor='black', arrowstyle='->'))
+
+    ax2.plot(prediction_set_size, task_success_rate, linewidth=3)
+    ax2.plot(knowno_prediction_set_size, knowno_task_success_rate, linewidth=3)
+    ax2.plot(simple_set_prediction_set_size, simple_set_task_success_rate, linewidth=3)
+    ax2.plot(entropy_set_prediction_set_size, entropy_set_task_success_rate, linewidth=3)
+    ax2.scatter(0, no_help_task_success_rate, s=500, marker="*", label="No help")
+    ax2.set_ylabel('Task Success Rate')
+    ax2.set_xlabel('Human Help Rate')
+    ax2.set_xlim([0, 1])
+    ax2.set_ylim([.6, 1])
+    major_ticks_x = [0, 0.2, 0.4, 0.6, 0.8, 1]
+    major_ticks_y = [0.6, 0.7, 0.8, 0.9, 1.0]
+    ax2.set_xticks(major_ticks_x)
+    ax2.set_yticks(major_ticks_y)
+    labels = [item.get_text() for item in ax2.get_xticklabels()]
+    labels[0] = "0"
+    labels[-1] = "1"
+    # Beat them into submission and set them back again
+    ax2.set_xticklabels(labels)
+    label_with_arrow(ax2, r'lower $\alpha_1$', xy=(0.92, 0.5), xytext=(0.85, 0.3),
+                     arrowprops=dict(facecolor='black', arrowstyle='->', lw=3, linestyle='dashed'))
+
+    f.legend(loc="lower center", ncol=5, frameon=False)
+
+    # Adjust the layout to make room for the shared legend
+    f.tight_layout(rect=[0, 0.1, 1, 1])
+    plt.show()
+
+    save_to = '/home/jlidard/PredictiveRL/figures/prediction_set_size_versus_task_success.png'
+
+    if save_fig:
+        plt.savefig(save_to)
+
+    return get_img_from_fig(plt.gcf())
+
+
+def plot_prediction_success_versus_help_bound(task_success_rate, help_rate_bound, temperature, save_fig=False):
+
+    # plot histogram and quantile
+    f, ax1 = plt.subplots(ncols=1, figsize=(16, 9))
+    sc = ax1.scatter(help_rate_bound, task_success_rate, s=400, c=temperature, cmap="turbo", vmin=temperature.min(),
+                vmax=temperature.max())
+    ax1.set_xlabel('Help Rate Bound')
+    ax1.set_ylabel('RCIP Parameter Set Size')
+    ax1.set_xlim([0, 0.2])
+    ax1.set_ylim([0, 10])
+    major_ticks_x = [0, 0.2, 0.4, 0.6, 0.8, 1]
+    major_ticks_y = [0.6, 0.7, 0.8, 0.9, 1.0]
+    ax1.set_xticks(major_ticks_x)
+    # ax1.set_yticks(major_ticks_y)
+    labels = [item.get_text() for item in ax1.get_xticklabels()]
+    labels[0] = "0"
+    labels[-1] = "1"
+    ax1.set_xticklabels(labels)
+    plt.axis('equal')
+    cbar, cax = add_colorbar(sc, aspect=20, pad_fraction=1.0)
+    cax.set_title(r'$\tau$=+1.0')
+    cax.set_xlabel(r'$\tau$=0.0')
+    cbar.set_ticks([])
+
+
+
+
+
+    #
+    # major_ticks_x = [0, 0.05, 0.10, 0.15, 0.20]
+    # major_ticks_y = [0, 2, 4, 6, 8, 10]
+    # ax1.set_xticks(major_ticks_x)
+    # ax1.set_yticks(major_ticks_y)
+    plt.show()
+
+
+    save_to = '/home/jlidard/PredictiveRL/figures/prediction_set_size_versus_task_success.png'
+
+    if save_fig:
+        plt.savefig(save_to)
+
+    return get_img_from_fig(plt.gcf())
+
+
+# def calibrate_hallway(env, model, n_cal=100, prediction_step_interval=10, image_obs=False):
+#
+#
+#     num_calibration = 1
+#     context_list = []
+#     label_list = []
+#     for _ in range(num_calibration):
+#         obs, _ = env.reset()
+#         intent = np.random.choice(5)
+#         env.seed_intent(HumanIntent(intent))
+#         total_reward = 0
+#         observation_list = []
+#         done = False
+#         i = 0
+#         # rollout to a random timepoint
+#         while not done:
+#             action, _states = model.predict(obs, deterministic=True)
+#             obs, rewards, done, trunc, info = env.step(action)
+#             total_reward += rewards
+#             if i % 10 == 0 and image_obs:
+#                 print(f"Total reward: {total_reward}")
+#                 if use_bullet:
+#                     img_obs = env.render()
+#                 else:
+#                     img_obs = env.render(resolution_scale=2)
+#                 observation = img_obs
+#                 observation_list.append(observation)
+#             i += 1
+#         context = np.stack(observation_list, 0)
+#         context_list.append(context)
+#         label_list.append(intent)  #TODO(justin.lidard): add dynamic intents
+#     dataset = pd.DataFrame({"context": context_list, "label": label_list})
+#     dataset.to_csv(dataframe_path)
+#
+#     # img = Image.fromarray(observation["obs"], 'RGB')
+#     # img.save('try.png')
+#     env.close()
+#     non_conformity_score = []
+#     prediction_set_size = {}
+#     lambdas = np.arange(0, 1, 0.1)
+#     for lam in lambdas:
+#         prediction_set_size[lam] = []
+#     image_path = f'/home/jlidard/PredictiveRL/language_img/'
+#     for index, row in dataset.iterrows():
+#         context = row[0]
+#         label = row[1]
+#         for k in range(context.shape[0]):
+#             save_path = f'/home/jlidard/PredictiveRL/language_img/hallway_tmp{k}.png'
+#             img = Image.fromarray(context[k])
+#             img.save(save_path)
+#         response = vlm(prompt=prompt, image_path=image_path) # response_str = response.json()["choices"][0]["message"]["content"]
+#         probs = hallway_parse_response(response)
+#         probs = probs/probs.sum()
+#         true_label_smx = probs[label]
+#         # extract probs
+#         non_conformity_score.append(1 - true_label_smx)
+#         for lam in lambdas:
+#             pred_set = probs > lam
+#             risk = 1 if pred_set.sum() > 1 else 0
+#             prediction_set_size[lam].append(sum(pred_set))
+#
+#         if index % 25 == 0:
+#             print(f"Done {index} of {num_calibration}.")
+#
+#     plot_risk_figures(prediction_set_size, is_bullet=True)
+#     plot_figures(non_conformity_score, is_bullet=True)
 
 
 def hoeffding_bentkus(risk_values, alpha_val=0.9, n=100):
-    sample_risk_mean = risk_values
+    sample_risk_mean = risk_values.mean(-1)
     alpha_val = torch.Tensor([alpha_val]).to(risk_values.device)
 
     max_alpha = torch.minimum(risk_values, alpha_val)
@@ -199,6 +349,66 @@ def hoeffding_bentkus(risk_values, alpha_val=0.9, n=100):
 
 def cross_entropy(a, b):
     return a * np.log(a/(b+0.001)+0.001) + (1-a) * np.log((1-a)/(1-b+0.001) + 0.001)
+
+def knowno_test_eval(N=500, eps_coverage=0.02, delta=0.01):
+    v = np.floor((N + 1)*eps_coverage)
+    a = N + 1 - v
+    b = v
+    return 1-beta.ppf(delta, a, b)
+
+
+def get_knowno_epsilon_values():
+
+    knowno_coverage_range = np.arange(0.01, .25, 0.001)
+    indices = list(range(len(knowno_coverage_range)))
+    test_eps_vals = [knowno_test_eval(eps_coverage=e) for e in knowno_coverage_range]
+    test_eps = [(i, j, k) for (i,j,k) in zip(indices, knowno_coverage_range, test_eps_vals)]
+    return test_eps_vals
+
+
+if __name__ == "__main__":
+    x=knowno_test_eval()
+    print(x)
+
+    risk = torch.Tensor([0.03])
+    y = hoeffding_bentkus(risk, alpha_val=0.04, n=500)
+    print(y.item())
+
+
+
+    # Generate random curves
+    x = np.linspace(0, 1, 100)
+    curves = []
+    num_curves = 5
+
+    for _ in range(num_curves):
+        # Random coefficients for a polynomial curve
+        coefficients = np.random.rand(4)
+        polynomial = np.poly1d(coefficients)
+
+        # Generate y values and ensure start and end points are (0,0) and (1,1)
+        y = polynomial(x)
+        y -= y[0]
+        y /= y[-1]
+        y *= (1 - y[0])
+
+        curves.append(y)
+
+    font = {
+            # 'weight': 'bold',
+            'size': 32}
+
+    matplotlib.rc('font', **font)
+
+    # plot_prediction_set_size_versus_success(x, curves[0], curves[0],
+    #                                         x, curves[1], curves[1],
+    #                                         x, curves[2], curves[2],
+    #                                         x, curves[3], curves[3],
+    #                                         curves[-1][50], None)
+
+    # plot_prediction_success_versus_help_bound(x, curves[1], x)
+
+
 
 
 

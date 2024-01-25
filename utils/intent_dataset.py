@@ -24,7 +24,8 @@ class IntentPredictionDataset(Dataset):
 
 
     def __init__(self, root_dir, train_set_size=5, is_train=True, max_pred=100, debug=False, min_len=10, target_len=200,
-                 max_in_set=None, use_habitat=False, use_vlm=False, calibration_offset=0):
+                 max_in_set=None, use_habitat=False, use_vlm=False, calibration_offset=0, seed=1234, is_calibration=False,
+                 is_calibration_test=False):
         """
         Arguments:
             csv_file (string): Path to the csv file with annotations.
@@ -34,38 +35,48 @@ class IntentPredictionDataset(Dataset):
         """
         self.max_pred = max_pred
         subdirs = sorted(os.listdir(root_dir))
+        num_total_data = len(subdirs)
         self.is_train = is_train
         self.min_len = min_len = target_len
         self.use_habitat = use_habitat
         self.use_vlm = use_vlm
+        indices = list(range(num_total_data))
+        np.random.seed(seed)
+        np.random.shuffle(indices)
+        indices_shuffled = indices # should be the same for train, test, etc
         if is_train:
-            if debug:
-                subdirs = subdirs[:100]
-            else:
-                subdirs = subdirs[:train_set_size]
+            indices = indices_shuffled[:train_set_size]
+        elif is_calibration:
+            indices = indices_shuffled[train_set_size:train_set_size+max_in_set]
+        elif is_calibration_test:
+            indices = indices_shuffled[train_set_size+calibration_offset:train_set_size+calibration_offset+max_in_set]
         else:
-            if debug:
-                subdirs = subdirs[:100]
-            else:
-                subdirs = subdirs[train_set_size+calibration_offset:]
+            indices = indices_shuffled[train_set_size:]
+
+        subdirs = [subdirs[i] for i in indices]
         self.traj_dict = OrderedDict()
         self.target_len=target_len
         self.file_names = {}
         i = 0
         for subdir in subdirs:
             file_path = os.path.join(root_dir, subdir)
+            if self.use_vlm:
+                file_path = os.path.join(file_path, "ground_truth.csv")
             if not os.path.isfile(file_path):
                 continue
             if max_in_set is not None and i >= max_in_set:
                 continue
             traj_data = pd.read_csv(file_path, on_bad_lines='skip')
             if self.valid_traj(traj_data):
-                self.traj_dict[subdir] = traj_data
-                self.file_names[i] = subdir
+                full_path = os.path.join(root_dir, subdir)
+                self.traj_dict[full_path] = traj_data
+                self.file_names[i] = full_path
                 i += 1
         self.root_dir = root_dir
 
     def valid_traj(self, traj_data):
+        if self.use_vlm:
+            return True
         return len(traj_data.index) >= self.min_len
 
 
@@ -77,22 +88,26 @@ class IntentPredictionDataset(Dataset):
         filename = self.file_names[idx]
         rollout_data = self.traj_dict[filename]
 
+        #TODO: clean up for cleaner handling of environments.
+
         if self.use_habitat:
             robot_ind_start = self._habitat_robot_pos_index
             human_ind_start = self._habitat_human_pos_index
             end_of_obs = self._habitat_end_of_obs
         elif self.use_vlm:
-            pass
+            ground_truth_intent = rollout_data["Groundtruth"]
         else:
             robot_ind_start = self._hallway_robot_pos_index
             human_ind_start = self._hallway_human_pos_index
             end_of_obs = self._hallway_end_of_obs
 
-        traj_len = len(rollout_data.index)
-        traj_stop = traj_len - self.max_pred # np.random.randint(low=self.min_len, high=traj_len-self.max_pred)
-        Tstop = traj_stop
-        obs_history = torch.Tensor(rollout_data.iloc[:Tstop, :end_of_obs].values).cuda()
-        obs_full = torch.Tensor(rollout_data.iloc[:, :end_of_obs].values).cuda()
+
+        if not self.use_vlm:
+            traj_len = len(rollout_data.index)
+            traj_stop = traj_len - self.max_pred # np.random.randint(low=self.min_len, high=traj_len-self.max_pred)
+            Tstop = traj_stop
+            obs_history = torch.Tensor(rollout_data.iloc[:Tstop, :end_of_obs].values).cuda()
+            obs_full = torch.Tensor(rollout_data.iloc[:, :end_of_obs].values).cuda()
 
         if self.use_habitat:
             max_obs = torch.zeros((obs_history.shape[0], self._habitat_max_obs))
@@ -102,23 +117,14 @@ class IntentPredictionDataset(Dataset):
             obs_full = max_obs_full
             obs_history = max_obs
             all_actions = torch.Tensor(rollout_data.iloc[:, -15:-1].values).cuda()
+        elif self.use_vlm:
+            pass
         else:
             all_actions = torch.Tensor(rollout_data.iloc[:, -3:-1].values).cuda() # optimal action only
 
         if self.use_vlm:
-            # we store the image, the optimal actions, and the intent.
-            imgs = rollout_data["img"]
-            imgs_stacked = torch.stack(imgs, 0)  # [T, 3, D, D]
-            imgs_stacked = imgs_stacked[None]
-            actions = rollout_data["actions"]
-            actions_stacked = torch.stack(actions, 0)
-            actions_stacked = actions_stacked[None]
-            intents = rollout_data["intent"]
-            intents_stacked = torch.stack(intents, 0)
-            intents_stacked = intents_stacked[None]
-            ret_dict = {"images": imgs_stacked,
-                        "actions": actions_stacked,
-                        "intent": intents_stacked}
+            ret_dict = {"directory_name": filename,
+                        "intent_full": torch.Tensor(ground_truth_intent)}
         else:
 
             robot_ind_end = robot_ind_start + 2
@@ -131,7 +137,8 @@ class IntentPredictionDataset(Dataset):
             intent_gt = torch.Tensor(rollout_data.iloc[Tstop:Tstop+self.max_pred, -1].values).cuda()
             intent_full = torch.Tensor(rollout_data.iloc[:, -1].values).cuda()
 
-            ret_dict = {"obs_history": obs_history,
+            ret_dict = {"directory_name": filename,
+                        "obs_history": obs_history,
                         "human_state_history": human_state_history,
                         "obs_full":  obs_full,
                         "robot_state_gt": robot_state_gt,
@@ -159,6 +166,8 @@ def collate_fn(data_list):
     for k in ret_keys:
         ret_dict[k] = torch.nn.utils.rnn.pad_sequence(ret_dict[k], batch_first=True)
 
+    ret_dict["batch_size"] = len(data_list)
+
     return ret_dict
 
 def collate_fn_stack_only(data_list):
@@ -174,7 +183,11 @@ def collate_fn_stack_only(data_list):
             ret_dict[k].append(d[k])
 
     for k in ret_keys:
-        ret_dict[k] = torch.stack(ret_dict[k], 0)
+        if type(ret_dict[k][0]) is torch.Tensor:
+            ret_dict[k] = torch.stack(ret_dict[k], 0)
+
+    ret_dict["batch_size"] = len(data_list)
+
 
     return ret_dict
 
