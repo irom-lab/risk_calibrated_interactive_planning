@@ -340,7 +340,7 @@ def run():
         data_dict = {}
         my_model.train()
 
-        if epoch % calibration_interval == 0 and should_calibrate:
+        if epoch % calibration_interval == 0:
 
             # Calibration phase
             risk_metrics, data_dict = run_calibration(args_namespace,
@@ -362,10 +362,13 @@ def run():
                                               alpha1s,
                                               data_dict,
                                               logdir,
-                                              epoch)
-
-            knowno_calibration_thresholds = risk_metrics["knowno_calibration_thresholds"]
-            calibration_thresholds = risk_metrics["calibration_thresholds"]
+                                              epoch,
+                                            should_calibrate=should_calibrate)
+            if should_calibrate:
+                knowno_calibration_thresholds = risk_metrics["knowno_calibration_thresholds"]
+                calibration_thresholds = risk_metrics["calibration_thresholds"]
+            else:
+                knowno_calibration_thresholds = calibration_thresholds = None
 
             _, data_dict = run_calibration(args_namespace,
                             cal_loader_test,
@@ -389,7 +392,8 @@ def run():
                             epoch,
                             calibration_thresholds=calibration_thresholds,
                             knowno_calibration_thresholds=knowno_calibration_thresholds,
-                            test_cal=True)
+                            test_cal=True,
+                            should_calibrate=should_calibrate)
 
 
         epoch_cost_train, _, train_stats = get_epoch_cost(train_loader, optimizer, scheduler, my_model,

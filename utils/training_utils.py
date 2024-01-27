@@ -14,30 +14,7 @@ from time import sleep
 def run_calibration(args, cal_loader, my_model, eval_policy, lambda_values, temperatures,
                     num_cal, traj_len, min_traj_len, num_intent,
                     use_habitat, use_vlm, epsilons, delta, alpha0s, alpha0s_simpleset, alpha1s, data_dict, logdir,
-                    epoch, calibration_thresholds=None, knowno_calibration_thresholds=None, test_cal=False):
-
-    # Normal calibration
-    risk_metrics, calibration_img = calibrate_predictor(args,
-                                                        cal_loader,
-                                                        my_model,
-                                                        eval_policy,
-                                                        lambda_values,
-                                                        temperatures,
-                                                        num_cal=num_cal,
-                                                        traj_len=traj_len,
-                                                        predict_step_interval=min_traj_len,
-                                                        num_intent=num_intent,
-                                                        use_habitat=use_habitat,
-                                                        epsilons=epsilons,
-                                                        alpha0s=alpha0s,
-                                                        alpha0s_simpleset=alpha0s_simpleset,
-                                                        alpha1s=alpha1s,
-                                                        delta=delta,
-                                                        use_vlm=use_vlm,
-                                                        calibration_thresholds=calibration_thresholds,
-                                                        knowno_calibration_thresholds=knowno_calibration_thresholds)
-    for k, img in calibration_img.items():
-        data_dict[k] = wandb.Image(img)
+                    epoch, calibration_thresholds=None, knowno_calibration_thresholds=None, test_cal=False, should_calibrate=True):
     if test_cal:
         if use_habitat:
             model_type = 'habitat'
@@ -52,7 +29,32 @@ def run_calibration(args, cal_loader, my_model, eval_policy, lambda_values, temp
             print("Saving model to " + save_dir)
             torch.save(my_model.state_dict(), save_dir)
             print("...done.")
-    data_dict.update(risk_metrics)
+            return {}, {}
+
+    # Normal calibration
+    if should_calibrate:
+        risk_metrics, calibration_img = calibrate_predictor(args,
+                                                            cal_loader,
+                                                            my_model,
+                                                            eval_policy,
+                                                            lambda_values,
+                                                            temperatures,
+                                                            num_cal=num_cal,
+                                                            traj_len=traj_len,
+                                                            predict_step_interval=min_traj_len,
+                                                            num_intent=num_intent,
+                                                            use_habitat=use_habitat,
+                                                            epsilons=epsilons,
+                                                            alpha0s=alpha0s,
+                                                            alpha0s_simpleset=alpha0s_simpleset,
+                                                            alpha1s=alpha1s,
+                                                            delta=delta,
+                                                            use_vlm=use_vlm,
+                                                            calibration_thresholds=calibration_thresholds,
+                                                            knowno_calibration_thresholds=knowno_calibration_thresholds)
+        for k, img in calibration_img.items():
+            data_dict[k] = wandb.Image(img)
+        data_dict.update(risk_metrics)
     return risk_metrics, data_dict
 
 def entropy(probs):
