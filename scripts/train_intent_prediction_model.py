@@ -23,7 +23,7 @@ from PIL import Image
 from utils.visualization_utils import plot_pred, get_img_from_fig
 
 from utils.intent_dataset import IntentPredictionDataset, collate_fn, collate_fn_stack_only
-from utils.training_utils import get_epoch_cost, calibrate_predictor
+from utils.training_utils import get_epoch_cost, calibrate_predictor, save_model
 from calibrate_hallway import get_knowno_epsilon_values
 from model_zoo.intent_transformer import IntentFormer
 
@@ -296,7 +296,7 @@ def run():
                         0,
                         calibration_thresholds=calibration_thresholds,
                         knowno_calibration_thresholds=knowno_calibration_thresholds,
-                       test_cal=True)
+                        test_cal=True)
 
         wandb.log(data_dict)
         return
@@ -334,7 +334,7 @@ def run():
     epochs = []
     train_losses = []
     test_losses = []
-    should_calibrate = False
+    should_calibrate = True
 
     for epoch in range(num_epochs):
         data_dict = {}
@@ -342,58 +342,56 @@ def run():
 
         if epoch % calibration_interval == 0:
 
-            # Calibration phase
-            risk_metrics, data_dict = run_calibration(args_namespace,
-                                              cal_loader,
-                                              my_model,
-                                              eval_policy,
-                                              lambda_values,
-                                              temperatures,
-                                              num_cal,
-                                              traj_len,
-                                              min_traj_len,
-                                              num_intent,
-                                              use_habitat,
-                                              use_vlm,
-                                              epsilons,
-                                              delta,
-                                              alpha0s,
-                                              alpha0s_simpleset,
-                                              alpha1s,
-                                              data_dict,
-                                              logdir,
-                                              epoch,
-                                            should_calibrate=should_calibrate)
             if should_calibrate:
+                # Calibration phase
+                risk_metrics, data_dict = run_calibration(args_namespace,
+                                                  cal_loader,
+                                                  my_model,
+                                                  eval_policy,
+                                                  lambda_values,
+                                                  temperatures,
+                                                  num_cal,
+                                                  traj_len,
+                                                  min_traj_len,
+                                                  num_intent,
+                                                  use_habitat,
+                                                  use_vlm,
+                                                  epsilons,
+                                                  delta,
+                                                  alpha0s,
+                                                  alpha0s_simpleset,
+                                                  alpha1s,
+                                                  data_dict,
+                                                  logdir,
+                                                  epoch)
                 knowno_calibration_thresholds = risk_metrics["knowno_calibration_thresholds"]
                 calibration_thresholds = risk_metrics["calibration_thresholds"]
-            else:
-                knowno_calibration_thresholds = calibration_thresholds = None
 
-            _, data_dict = run_calibration(args_namespace,
-                            cal_loader_test,
-                            my_model,
-                            eval_policy,
-                            lambda_values,
-                            temperatures,
-                            num_cal,
-                            traj_len,
-                            min_traj_len,
-                            num_intent,
-                            use_habitat,
-                            use_vlm,
-                            epsilons,
-                            delta,
-                            alpha0s,
-                            alpha0s_simpleset,
-                            alpha1s,
-                            data_dict,
-                            logdir,
-                            epoch,
-                            calibration_thresholds=calibration_thresholds,
-                            knowno_calibration_thresholds=knowno_calibration_thresholds,
-                            test_cal=True,
-                            should_calibrate=should_calibrate)
+                _, data_dict = run_calibration(args_namespace,
+                                cal_loader_test,
+                                my_model,
+                                eval_policy,
+                                lambda_values,
+                                temperatures,
+                                num_cal,
+                                traj_len,
+                                min_traj_len,
+                                num_intent,
+                                use_habitat,
+                                use_vlm,
+                                epsilons,
+                                delta,
+                                alpha0s,
+                                alpha0s_simpleset,
+                                alpha1s,
+                                data_dict,
+                                logdir,
+                                epoch,
+                                calibration_thresholds=calibration_thresholds,
+                                knowno_calibration_thresholds=knowno_calibration_thresholds,
+                                test_cal=True)
+
+            save_model(my_model, use_habitat, use_vlm, epoch)
 
 
         epoch_cost_train, _, train_stats = get_epoch_cost(train_loader, optimizer, scheduler, my_model,

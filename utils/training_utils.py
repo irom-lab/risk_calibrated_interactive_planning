@@ -11,50 +11,50 @@ import os
 # from model_zoo.vlm_interface import processed_probs, save_processed_probs
 from time import sleep
 
+def save_model(my_model, use_habitat, use_vlm, epoch):
+    if use_habitat:
+        model_type = 'habitat'
+    elif use_vlm:
+        model_type = 'vlm'
+    else:
+        model_type = 'hallway'
+    home = os.path.expanduser('~')
+    save_dir = os.path.join(home, f'rcip/trained_models/{model_type}epoch{epoch}.pth')
+    os.makedirs("/home/jlidard/rcip/trained_models/", exist_ok=True)
+    if not use_vlm:
+        print("Saving model to " + save_dir)
+        torch.save(my_model.state_dict(), save_dir)
+        print("...done.")
+
 def run_calibration(args, cal_loader, my_model, eval_policy, lambda_values, temperatures,
                     num_cal, traj_len, min_traj_len, num_intent,
                     use_habitat, use_vlm, epsilons, delta, alpha0s, alpha0s_simpleset, alpha1s, data_dict, logdir,
-                    epoch, calibration_thresholds=None, knowno_calibration_thresholds=None, test_cal=False, should_calibrate=True):
-    if test_cal:
-        if use_habitat:
-            model_type = 'habitat'
-        elif use_vlm:
-            model_type = 'vlm'
-        else:
-            model_type = 'hallway'
-        home = os.path.expanduser('~')
-        save_dir = os.path.join(home, f'rcip/trained_models/{model_type}epoch{epoch}.pth')
-        os.makedirs("/home/jlidard/rcip/trained_models/", exist_ok=True)
-        if not use_vlm:
-            print("Saving model to " + save_dir)
-            torch.save(my_model.state_dict(), save_dir)
-            print("...done.")
-            return {}, {}
+                    epoch, calibration_thresholds=None, knowno_calibration_thresholds=None, test_cal=False):
+
 
     # Normal calibration
-    if should_calibrate:
-        risk_metrics, calibration_img = calibrate_predictor(args,
-                                                            cal_loader,
-                                                            my_model,
-                                                            eval_policy,
-                                                            lambda_values,
-                                                            temperatures,
-                                                            num_cal=num_cal,
-                                                            traj_len=traj_len,
-                                                            predict_step_interval=min_traj_len,
-                                                            num_intent=num_intent,
-                                                            use_habitat=use_habitat,
-                                                            epsilons=epsilons,
-                                                            alpha0s=alpha0s,
-                                                            alpha0s_simpleset=alpha0s_simpleset,
-                                                            alpha1s=alpha1s,
-                                                            delta=delta,
-                                                            use_vlm=use_vlm,
-                                                            calibration_thresholds=calibration_thresholds,
+    risk_metrics, calibration_img = calibrate_predictor(args,
+                                                        cal_loader,
+                                                        my_model,
+                                                        eval_policy,
+                                                        lambda_values,
+                                                        temperatures,
+                                                        num_cal=num_cal,
+                                                        traj_len=traj_len,
+                                                        predict_step_interval=min_traj_len,
+                                                        num_intent=num_intent,
+                                                        use_habitat=use_habitat,
+                                                        epsilons=epsilons,
+                                                        alpha0s=alpha0s,
+                                                        alpha0s_simpleset=alpha0s_simpleset,
+                                                        alpha1s=alpha1s,
+                                                        delta=delta,
+                                                        use_vlm=use_vlm,
+                                                        calibration_thresholds=calibration_thresholds,
                                                             knowno_calibration_thresholds=knowno_calibration_thresholds)
-        for k, img in calibration_img.items():
-            data_dict[k] = wandb.Image(img)
-        data_dict.update(risk_metrics)
+    for k, img in calibration_img.items():
+        data_dict[k] = wandb.Image(img)
+    data_dict.update(risk_metrics)
     return risk_metrics, data_dict
 
 def entropy(probs):
@@ -234,7 +234,7 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
     cnt = 0
     num_temperatures = len(temperatures)
     num_lambdas = len(lambdas)
-    num_calibration = num_cal
+    num_calibration = len(dataloader)
     num_epsilons = len(epsilons)
     dataloader_tqdm = tqdm(dataloader)
     # max_steps = traj_len // predict_step_interval
@@ -270,7 +270,7 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
 
             batch_z = batch_dict["intent_full"].cuda()
             dir_name = batch_dict["directory_name"]
-            batch_size = batch_dict["batch_size"]
+            batch_size = batch_z.shape[0]
             batch_end_ind = batch_start_ind + batch_size
 
             if not use_vlm:
