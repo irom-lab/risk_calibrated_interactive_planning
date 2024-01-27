@@ -235,7 +235,11 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
     num_calibration = num_cal
     num_epsilons = len(epsilons)
     dataloader_tqdm = tqdm(dataloader)
-    max_steps = traj_len // predict_step_interval
+    # max_steps = traj_len // predict_step_interval
+    if use_vlm:
+        traj_len += 1
+    traj_windows = torch.arange(predict_step_interval, traj_len, predict_step_interval)
+    max_steps = len(traj_windows)
     non_conformity_score = -np.inf*torch.ones((num_temperatures, num_calibration, max_steps))
     prediction_set_size = -np.inf*torch.ones((num_temperatures, num_calibration, max_steps, num_lambdas))
     miscoverage_instance = -np.inf*torch.ones((num_temperatures, num_calibration, max_steps, num_lambdas))
@@ -266,7 +270,7 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
             dir_name = batch_dict["directory_name"]
             batch_size = batch_dict["batch_size"]
             batch_end_ind = batch_start_ind + batch_size
-            traj_windows = torch.arange(predict_step_interval, traj_len, predict_step_interval)
+
             if not use_vlm:
 
                 batch_X = batch_dict["obs_full"].cuda()
