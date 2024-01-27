@@ -21,6 +21,7 @@ import argparse
 import torch
 
 from pathlib import Path
+import time
 
 
 from PIL import Image
@@ -82,7 +83,7 @@ PROMPT_VLM = ("The first three images are different bins sorted by a human. Desc
  
 PROMPT_LLM = ("Here is a description of three bins and an object we want to sort.")
 
-OPTIONS = ["White Bin", "Black Bin", "Blue Bin", "An option not listed here"]
+OPTIONS = ["Fist Bin", "Second Bin", "Third Bin", "Unsure"]
 LETTER_CHOICES = ["A", "B", "C", "D"]
 
 PROMPT_DEBUG = "This is a set of four distinct images. What's in each image? List all objects you see."
@@ -104,7 +105,7 @@ def get_mcqa(include_none=True, shuffle_options=True, single_letter=True, python
     #     mcqa += f" {LETTER_CHOICES[num_options]}) None of the above"
 
     if single_letter:
-        mcqa += ". Give your answer as a single letter"
+        mcqa += ". Give your answer as a single letter: A, B, C, or D."
 
     if python_dict_probs:
         mcqa += (f". Give your answer as a python dictionary with keys: {options_mcqa }. "
@@ -143,8 +144,8 @@ def check_if_description_exists(image_files, temperature):
     return description
 
 def check_if_plan_exists(image_files, temperature):
-    plan_filename = f'plan_temp_{temperature}.csv'
-    scores_filename = f'scores_temp_{temperature}.csv'
+    plan_filename = f'new_plan_temp_{temperature}.csv'
+    scores_filename = f'new_scores_temp_{temperature}.csv'
 
     plan = None
     target_file_plan = os.path.join(image_files, plan_filename)
@@ -171,8 +172,8 @@ def save_description(image_files, description, temperature):
     return
 
 def save_plan(image_files, plan, scores, temperature):
-    plan_filename = f'plan_temp_{temperature}.csv'
-    scores_filename = f'scores_temp_{temperature}.csv'
+    plan_filename = f'new_plan_temp_{temperature}.csv'
+    scores_filename = f'new_scores_temp_{temperature}.csv'
 
     target_file_plan = os.path.join(image_files, plan_filename)
     target_file_scores = os.path.join(image_files, scores_filename)
@@ -266,12 +267,13 @@ def generate_prediction_openai(prompt_vlm,
                                prompt_llm,
                                prompt_mcqa,
                                image_files,
+                               indices,
                                max_tokens=1000,
                                temperature_vlm=0,
                                temperature_llm=0,
                                seed=1234,
                                timeout_seconds=30,
-                               max_attempts=10,
+                               max_attempts=100,
                                intent_set_size=12,
                                is_dir=True):
     text_description = check_if_description_exists(image_files, temperature_vlm)
@@ -286,6 +288,7 @@ def generate_prediction_openai(prompt_vlm,
         full_prompt = space.join([prompt_llm, text_description, prompt_mcqa])
         full_message, scores = vlm_or_llm(full_prompt, image_files, max_tokens=max_tokens,
                                           temperature=temperature_llm, seed=seed, is_vlm=False)
+        scores = scores[indices]
         save_plan(image_files, full_message, scores, temperature_llm)
     return full_message, scores, text_description
 
@@ -312,17 +315,28 @@ def vlm_or_llm(prompt,
             if is_vlm:
                 payload = make_payload_vlm(prompt=prompt, max_tokens=max_tokens, temperature=temperature, seed=seed, image_dr=image_files)
             else:
-                payload = make_payload_llm(prompt=prompt, max_tokens=max_tokens, temperature=temperature, seed=seed)
+                payload = make_payload_llm(prompt=prompt, max_tokens=1, temperature=temperature, seed=seed)
             response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
             parsed_response = parse_response(response, logprobs_avail=(not is_vlm))
             break
         except Exception as e:
-            pass
+            print(e)
+            e_type = "VLM" if is_vlm else "LLM"
+            print(f"Error: {e_type}. Response below:")
+            print(response.json())
+            time.sleep(60)
     return parsed_response
 
 def parse_response(response, logprobs_avail=False, python_dict_probs=False):
-    response_json = response.json()["choices"][0]
-    messages = response_json ["message"]["content"]
+    resp_json = response.json()
+    if "choices" in resp_json:
+        response_json = resp_json["choices"][0]
+        messages = response_json["message"]["content"]
+    elif "error" in resp_json:
+        response_json = resp_json["error"]
+        messages = "A visual system error occurred. Please make your best guess."
+    else:
+        raise ValueError("Unexpected response.")
     logprobs = None
     if logprobs_avail:
         logprobs_tensor = -30*torch.ones(len(LETTER_CHOICES))
@@ -535,10 +549,11 @@ def get_action_distribution_from_image(args, image_path, object_ind, temperature
                                                  prompt_llm,
                                                  prompt_mcqa,
                                                  image_path,
+                                                 indices,
                                                  temperature_vlm=args.temperature,
                                                  temperature_llm=temperature_llm,
                                                  max_tokens=args.max_new_tokens)
-        score = score[indices]
+        # score = score[indices]
     # print(pred)
     # print(score)
     # print(options)

@@ -23,7 +23,7 @@ class IntentFormerDecoder(torch.nn.Module):
         time_horizon = self.future_horizon
         self.nlayer = nlayer
 
-        anchor_endpoints = torch.rand((self.num_motion_modes, 2))# torch.Tensor([[0, 4], [0, 2], [0, 0], [0, -2], [0, -4]])
+        anchor_endpoints = torch.Tensor([[0, 4], [0, 2], [0, 0], [0, -2], [0, -4]])
         self.traj_anchors = anchor_endpoints.cuda()
         out_dim = time_horizon * coord_dim
         self.anchor_encoder_mlp = create_mlp(2, [hidden_dim, hidden_dim])
@@ -39,7 +39,7 @@ class IntentFormerDecoder(torch.nn.Module):
             )
 
 
-    def forward(self, input, intent_points):
+    def forward(self, input, intent_points=None):
         """
         :param input: Tensor of shape [B, T, D], with T large
         :return:
@@ -50,14 +50,18 @@ class IntentFormerDecoder(torch.nn.Module):
         B, nseg, hidden_dim = input.shape
 
         memory = input
-        anchor_encoding = self.anchor_encoder_mlp(intent_points)
+        if intent_points is None:
+            anchor_encoding = self.anchor_encoder_mlp(self.traj_anchors)
+        else:
+            anchor_encoding = self.anchor_encoder_mlp(intent_points)
+        num_motion_modes = anchor_encoding.shape[0]
         tgt = anchor_encoding[None].repeat(B, 1, 1)
         for layer in self.transformer_decoder_layers:
             x = layer(tgt, memory)
             tgt = x
 
         output_traj = self.traj_decoder_mlp(x)
-        output_traj = output_traj.reshape(B, self.num_motion_modes, self.future_horizon, self.out_coord_dim)
+        output_traj = output_traj.reshape(B, num_motion_modes, self.future_horizon, self.out_coord_dim)
 
         output_weight = self.weight_decoder_mlp(x)
         output_weight = output_weight[..., 0]

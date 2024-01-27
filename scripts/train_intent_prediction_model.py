@@ -54,7 +54,8 @@ def run():
     parser.add_argument('--network-hidden-dim', type=int, default=64)
     parser.add_argument('--n-epochs', type=int, default=10)
     parser.add_argument('--log-history', type=str2bool, default=False)
-    parser.add_argument('--load-model', type=str2bool, default=False)
+    parser.add_argument('--load-model-path-hallway', type=str, default=None)
+    parser.add_argument('--load-model-path-habitat', type=str, default=None)
     parser.add_argument('--render', type=str2bool, default=False)
     parser.add_argument('--num-envs', type=int, default=1)
     parser.add_argument('--use-discrete-action-space', type=str2bool, default=True)
@@ -110,7 +111,8 @@ def run():
     render = args["render"]
     num_cpu = args["num_envs"]
     log_history = args["log_history"]
-    load_model = args["load_model"]
+    load_model_path_habitat = args["load_model_path_habitat"]
+    load_model_path_hallway = args["load_model_path_hallway"]
     use_discrete_action = args["use_discrete_action_space"]
     learn_steps = args["learn_steps"]
     n_epochs = args["n_epochs"]
@@ -170,8 +172,22 @@ def run():
     csv_dir = f"/home/jlidard/PredictiveRL/logs/{rollout_num}/rollouts"
     if use_habitat:
         csv_dir = args["habitat_csv_dir"]
-    if use_vlm:
+        anchors = None
+        min_traj_len = 100
+        traj_len = 250
+        load_model_path = load_model_path_habitat
+    elif use_vlm:
         csv_dir = args["vlm_csv_dir"]
+        anchors = None
+        traj_len = 8
+        load_model_path = None
+    else:
+        anchors_y = torch.linspace(-5, 5, 5)
+        anchors = torch.zeros(5, 2)
+        anchors[:, -1] = anchors_y
+        min_traj_len = 20
+        traj_len = 200
+        load_model_path = load_model_path_hallway
 
     os.makedirs(logdir, exist_ok=True)
 
@@ -189,25 +205,29 @@ def run():
     output_len = future_horizon
     diff_order = 1
     hidden_size = hdim
-    traj_len = args["traj_len"]
     delta = 0.05
-    epsilons = get_knowno_epsilon_values()
-    alpha0s = np.arange(0.01, 0.25, 0.001)
-    alpha1s = np.arange(0.04, 1, 0.004)
-    temperatures = np.arange(0, 1.01, 0.1)
+    epsilons = get_knowno_epsilon_values()[:2]
+    alpha0s = np.arange(0.01, 0.25, 0.001)[:2]
+    alpha0s_simpleset = np.linspace(0.01, 0.6, len(alpha0s))[:2]
+    alpha1s = np.arange(0.04, 1, 0.004)[:2]
+    temperatures = np.arange(0, 1.801, 0.1)
+    debug = True
+    train_max_in_set = train_set_size
 
     train_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=True,
-                                       max_pred=future_horizon, debug=debug, min_len=min_traj_len,
-                                       use_habitat=use_habitat, use_vlm=use_vlm, seed=seed)
+                                       max_pred=future_horizon, debug=debug, min_len=traj_len,
+                                       use_habitat=use_habitat, use_vlm=use_vlm, seed=seed,
+                                       max_in_set=train_max_in_set)
     test_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False,
-                                      max_pred=future_horizon,  debug=debug, min_len=min_traj_len,
-                                      use_habitat=use_habitat, use_vlm=use_vlm, seed=seed)
+                                      max_pred=future_horizon,  debug=debug, min_len=traj_len,
+                                      use_habitat=use_habitat, use_vlm=use_vlm, seed=seed,
+                                      max_in_set=train_max_in_set)
     cal_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False,
-                                     max_pred=future_horizon, debug=debug, min_len=min_traj_len,
+                                     max_pred=future_horizon, debug=debug, min_len=traj_len,
                                      max_in_set=calibration_set_size, use_habitat=use_habitat, use_vlm=use_vlm,
                                      is_calibration=True)
     cal_ds_test = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False,
-                                     max_pred=future_horizon, debug=debug, min_len=min_traj_len,
+                                     max_pred=future_horizon, debug=debug, min_len=traj_len,
                                      max_in_set=calibration_set_size, use_habitat=use_habitat, use_vlm=use_vlm,
                                      calibration_offset=calibration_set_size, is_calibration_test=True)
 
@@ -218,38 +238,43 @@ def run():
 
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=collate_dict)
     test_loader = DataLoader(test_ds, batch_size=val_batch_size, shuffle=True, collate_fn=collate_dict)
-    cal_loader = DataLoader(cal_ds, batch_size=val_batch_size, shuffle=True, collate_fn=collate_dict)
-    cal_loader_test = DataLoader(cal_ds_test, batch_size=val_batch_size, shuffle=True, collate_fn=collate_dict)
+    cal_loader = DataLoader(cal_ds, batch_size=1, shuffle=True, collate_fn=collate_dict)
+    cal_loader_test = DataLoader(cal_ds_test, batch_size=1, shuffle=True, collate_fn=collate_dict)
     num_cal = cal_ds.__len__()
 
-    num_thresh = 100
+    # TODO: CHANGE BACK
+    num_thresh = 2
     lambda_interval = 1 / num_thresh
     lambda_values = np.arange(0, 1, lambda_interval)
     if use_vlm:
         # Only need to do a single iteration, since model is static
 
         data_dict = {}
-        run_calibration(args_namespace,
-                        cal_loader,
-                        None,
-                        eval_policy,
-                        lambda_values,
-                        temperatures,
-                        num_cal,
-                        traj_len,
-                        min_traj_len,
-                        num_intent,
-                        use_habitat,
-                        use_vlm,
-                        epsilons,
-                        delta,
-                        alpha0s,
-                        alpha1s,
-                        data_dict,
-                        logdir,
-                        0)
+        risk_metrics, _ = run_calibration(args_namespace,
+                                cal_loader,
+                                None,
+                                eval_policy,
+                                lambda_values,
+                                temperatures,
+                                num_cal,
+                                traj_len,
+                                min_traj_len,
+                                num_intent,
+                                use_habitat,
+                                use_vlm,
+                                epsilons,
+                                delta,
+                                alpha0s,
+                                alpha0s_simpleset,
+                                alpha1s,
+                                data_dict,
+                                logdir,
+                                0)
 
-        run_calibration(args_namespace,
+        knowno_calibration_thresholds = risk_metrics["knowno_calibration_thresholds"]
+        calibration_thresholds = risk_metrics["calibration_thresholds"]
+
+        _, data_dict = run_calibration(args_namespace,
                         cal_loader_test,
                         None,
                         eval_policy,
@@ -264,14 +289,22 @@ def run():
                         epsilons,
                         delta,
                         alpha0s,
+                        alpha0s_simpleset,
                         alpha1s,
                         data_dict,
                         logdir,
-                        0)
+                        0,
+                        calibration_thresholds=calibration_thresholds,
+                        knowno_calibration_thresholds=knowno_calibration_thresholds,
+                       test_cal=True)
+
+        wandb.log(data_dict)
         return
 
 
     my_model = IntentFormer(hdim, num_segments, future_horizon, params=params).cuda()
+    if load_model_path is not None:
+        my_model.load_state_dict(torch.load(load_model_path))
     # my_model = TransformerModel(len(input_cols), input_length, output_length=output_len)
     optimizer = optim.Adam(my_model.parameters(), lr=1e-4)
     # risk_evaluator = RiskEvaluator(self.intent, self.intent_predictor, self.threshold_values,
@@ -309,46 +342,59 @@ def run():
         if epoch % calibration_interval == 0:
 
             # Calibration phase
-            run_calibration(args_namespace,
-                            cal_loader,
-                            my_model,
-                            eval_policy,
-                            lambda_values,
-                            num_cal, traj_len,
-                            min_traj_len,
-                            num_intent,
-                            use_habitat,
-                            epsilons,
-                            delta,
-                            alpha0s,
-                            alpha1s,
-                            data_dict,
-                            logdir,
-                            epoch)
+            risk_metrics, data_dict = run_calibration(args_namespace,
+                                              cal_loader,
+                                              my_model,
+                                              eval_policy,
+                                              lambda_values,
+                                              temperatures,
+                                              num_cal,
+                                              traj_len,
+                                              min_traj_len,
+                                              num_intent,
+                                              use_habitat,
+                                              use_vlm,
+                                              epsilons,
+                                              delta,
+                                              alpha0s,
+                                              alpha0s_simpleset,
+                                              alpha1s,
+                                              data_dict,
+                                              logdir,
+                                              epoch)
 
+            knowno_calibration_thresholds = risk_metrics["knowno_calibration_thresholds"]
+            calibration_thresholds = risk_metrics["calibration_thresholds"]
 
-            # Calibration on unseen data (test)
-            run_calibration(args_namespace,
+            _, data_dict = run_calibration(args_namespace,
                             cal_loader_test,
                             my_model,
                             eval_policy,
                             lambda_values,
-                            num_cal, traj_len,
+                            temperatures,
+                            num_cal,
+                            traj_len,
                             min_traj_len,
                             num_intent,
                             use_habitat,
+                            use_vlm,
                             epsilons,
                             delta,
                             alpha0s,
+                            alpha0s_simpleset,
                             alpha1s,
                             data_dict,
                             logdir,
-                            epoch)
+                            epoch,
+                            calibration_thresholds=calibration_thresholds,
+                            knowno_calibration_thresholds=knowno_calibration_thresholds,
+                            test_cal=True)
 
 
         epoch_cost_train, _, train_stats = get_epoch_cost(train_loader, optimizer, scheduler, my_model,
                                                           mse_loss, CE_loss, traj_len, min_traj_len,
-                                                          future_horizon, train=True, ent_coeff=entropy_coeff)
+                                                          future_horizon, train=True, ent_coeff=entropy_coeff,
+                                                          use_habitat=use_habitat)
 
         data_dict["train_loss"] = epoch_cost_train
         for k,v in train_stats.items():
@@ -360,7 +406,7 @@ def run():
                 epoch_cost_val, viz_img, val_stats = get_epoch_cost(test_loader, optimizer, scheduler,
                                                                     my_model, mse_loss, CE_loss,
                                                                     traj_len, min_traj_len,
-                                                                    future_horizon, train=False)
+                                                                    future_horizon, train=False, use_habitat=use_habitat)
             data_dict["val_loss"] = epoch_cost_val
             data_dict["example_vis"] = wandb.Image(viz_img)
             for k, v in val_stats.items():

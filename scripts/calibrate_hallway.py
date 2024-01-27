@@ -15,7 +15,7 @@ from os.path import expanduser
 import wandb
 from wandb_osh.hooks import TriggerWandbSyncHook
 from scipy.stats import binom, beta
-from utils.visualization_utils import get_img_from_fig
+from utils.visualization_utils import get_img_from_fig, add_colorbar
 import torch
 import matplotlib
 from matplotlib.ticker import FormatStrFormatter
@@ -61,7 +61,10 @@ def plot_figures(non_conformity_score, qhat, is_bullet=False, save_fig=False):
         name = 'bullet_hallway_non_conformity.png'
     if save_fig:
         plt.savefig(name)
-    return get_img_from_fig(plt.gcf())
+
+    img = get_img_from_fig(plt.gcf())
+    plt.close('all')
+    return img
 
 
 def plot_nonsingleton_figure(lambdas, prediction_set_size, alpha=0.15, is_bullet=False, save_fig=False):
@@ -88,7 +91,9 @@ def plot_nonsingleton_figure(lambdas, prediction_set_size, alpha=0.15, is_bullet
     if save_fig:
         plt.savefig(name)
 
-    return get_img_from_fig(plt.gcf())
+    img = get_img_from_fig(plt.gcf())
+    plt.close('all')
+    return img
 
 def plot_miscoverage_figure(lambdas, miscoverage_rate, alpha=0.15, is_bullet=False, save_fig=False):
 
@@ -115,17 +120,12 @@ def plot_miscoverage_figure(lambdas, miscoverage_rate, alpha=0.15, is_bullet=Fal
     if save_fig:
         plt.savefig(name)
 
-    return get_img_from_fig(plt.gcf())
 
-def add_colorbar(im, aspect=20, pad_fraction=0.5, **kwargs):
-    """Add a vertical color bar to an image plot."""
-    divider = axes_grid1.make_axes_locatable(im.axes)
-    width = axes_grid1.axes_size.AxesY(im.axes, aspect=1./aspect)
-    pad = axes_grid1.axes_size.Fraction(pad_fraction, width)
-    current_ax = plt.gca()
-    cax = divider.append_axes("right", size=width, pad=pad)
-    plt.sca(current_ax)
-    return im.axes.figure.colorbar(im, cax=cax, **kwargs), cax
+    img = get_img_from_fig(plt.gcf())
+    plt.close('all')
+    return img
+
+
 
 
 # Adjusting the function to remove the invalid property 'shrink'
@@ -161,8 +161,7 @@ def plot_prediction_set_size_versus_success(prediction_set_size, task_success_ra
                                             knowno_prediction_set_size, knowno_task_success_rate, knowno_help_rate,
                                             simple_set_prediction_set_size, simple_set_task_success_rate, simple_set_help_rate,
                                             entropy_set_prediction_set_size, entropy_set_task_success_rate, entropy_set_help_rate,
-                                            no_help_task_success_rate,
-                                            optimal_temperature, save_fig=True):
+                                            no_help_task_success_rate, save_fig=False):
 
     # plot histogram and quantile
     f, (ax1, ax2) = plt.subplots(ncols=2, figsize=(32, 9))
@@ -188,7 +187,7 @@ def plot_prediction_set_size_versus_success(prediction_set_size, task_success_ra
     ax2.plot(knowno_prediction_set_size, knowno_task_success_rate, linewidth=3)
     ax2.plot(simple_set_prediction_set_size, simple_set_task_success_rate, linewidth=3)
     ax2.plot(entropy_set_prediction_set_size, entropy_set_task_success_rate, linewidth=3)
-    ax2.scatter(0, no_help_task_success_rate, s=500, marker="*", label="No help")
+    ax2.scatter(np.zeros_like(no_help_task_success_rate), no_help_task_success_rate, s=500, marker="*", label="No help")
     ax2.set_ylabel('Task Success Rate')
     ax2.set_xlabel('Human Help Rate')
     ax2.set_xlim([0, 1])
@@ -209,7 +208,6 @@ def plot_prediction_set_size_versus_success(prediction_set_size, task_success_ra
 
     # Adjust the layout to make room for the shared legend
     f.tight_layout(rect=[0, 0.1, 1, 1])
-    plt.show()
 
     save_to = '/home/jlidard/PredictiveRL/figures/prediction_set_size_versus_task_success.png'
 
@@ -243,15 +241,6 @@ def plot_prediction_success_versus_help_bound(task_success_rate, help_rate_bound
     cax.set_xlabel(r'$\tau$=0.0')
     cbar.set_ticks([])
 
-
-
-
-
-    #
-    # major_ticks_x = [0, 0.05, 0.10, 0.15, 0.20]
-    # major_ticks_y = [0, 2, 4, 6, 8, 10]
-    # ax1.set_xticks(major_ticks_x)
-    # ax1.set_yticks(major_ticks_y)
     plt.show()
 
 
@@ -261,74 +250,6 @@ def plot_prediction_success_versus_help_bound(task_success_rate, help_rate_bound
         plt.savefig(save_to)
 
     return get_img_from_fig(plt.gcf())
-
-
-# def calibrate_hallway(env, model, n_cal=100, prediction_step_interval=10, image_obs=False):
-#
-#
-#     num_calibration = 1
-#     context_list = []
-#     label_list = []
-#     for _ in range(num_calibration):
-#         obs, _ = env.reset()
-#         intent = np.random.choice(5)
-#         env.seed_intent(HumanIntent(intent))
-#         total_reward = 0
-#         observation_list = []
-#         done = False
-#         i = 0
-#         # rollout to a random timepoint
-#         while not done:
-#             action, _states = model.predict(obs, deterministic=True)
-#             obs, rewards, done, trunc, info = env.step(action)
-#             total_reward += rewards
-#             if i % 10 == 0 and image_obs:
-#                 print(f"Total reward: {total_reward}")
-#                 if use_bullet:
-#                     img_obs = env.render()
-#                 else:
-#                     img_obs = env.render(resolution_scale=2)
-#                 observation = img_obs
-#                 observation_list.append(observation)
-#             i += 1
-#         context = np.stack(observation_list, 0)
-#         context_list.append(context)
-#         label_list.append(intent)  #TODO(justin.lidard): add dynamic intents
-#     dataset = pd.DataFrame({"context": context_list, "label": label_list})
-#     dataset.to_csv(dataframe_path)
-#
-#     # img = Image.fromarray(observation["obs"], 'RGB')
-#     # img.save('try.png')
-#     env.close()
-#     non_conformity_score = []
-#     prediction_set_size = {}
-#     lambdas = np.arange(0, 1, 0.1)
-#     for lam in lambdas:
-#         prediction_set_size[lam] = []
-#     image_path = f'/home/jlidard/PredictiveRL/language_img/'
-#     for index, row in dataset.iterrows():
-#         context = row[0]
-#         label = row[1]
-#         for k in range(context.shape[0]):
-#             save_path = f'/home/jlidard/PredictiveRL/language_img/hallway_tmp{k}.png'
-#             img = Image.fromarray(context[k])
-#             img.save(save_path)
-#         response = vlm(prompt=prompt, image_path=image_path) # response_str = response.json()["choices"][0]["message"]["content"]
-#         probs = hallway_parse_response(response)
-#         probs = probs/probs.sum()
-#         true_label_smx = probs[label]
-#         # extract probs
-#         non_conformity_score.append(1 - true_label_smx)
-#         for lam in lambdas:
-#             pred_set = probs > lam
-#             risk = 1 if pred_set.sum() > 1 else 0
-#             prediction_set_size[lam].append(sum(pred_set))
-#
-#         if index % 25 == 0:
-#             print(f"Done {index} of {num_calibration}.")
-#
-#     plot_risk_figures(prediction_set_size, is_bullet=True)
-#     plot_figures(non_conformity_score, is_bullet=True)
 
 
 def hoeffding_bentkus(risk_values, alpha_val=0.9, n=100):

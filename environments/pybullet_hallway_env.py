@@ -28,8 +28,8 @@ RIGHT_BOUNDARY = 7
 UPPER_BOUNDARY = 4.5
 LOWER_BOUNDARY = -4.5
 
-RENDER_HEIGHT = 720
-RENDER_WIDTH = 960
+RENDER_HEIGHT = 3200 # 720
+RENDER_WIDTH = 6400 # 960
 
 WALL_XLEN = 2
 WALL_YLEN = 1
@@ -386,7 +386,7 @@ class BulletHallwayEnv(gym.Env):
         agent_0_vel = action_offset  #+action[2]
         agent_1_vel = action_offset  #+action[3]
         mapped_action = self.map_discrete_to_continuous(action)
-        if self.hide_intent and len(self.observation_history) > 0 and self.timesteps % self.predict_interval == 0:
+        if not self.hide_intent and len(self.observation_history) > 0 and self.timesteps % self.predict_interval == 0:
             intent, confidence = self.risk_evaluator.infer_intent(self.observation_history, self.human_pos_history, self.timesteps, self.cumulative_reward)
         else:
             intent = self.intent
@@ -439,15 +439,15 @@ class BulletHallwayEnv(gym.Env):
 
         violated_dist = any(wall_dist <= 0.25) or any(human_wall_dist <= 0.25)
         collision_penalty = 0
-        if violated_dist:
-            self.done = True
+        if violated_dist: # turn off for car scaling
+            # self.done = True
             collision_penalty += 0.01
 
         if collision_with_human(self.robot_state, self.human_state):
             self.done = True
 
-        if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1:
-            self.done = True
+        if collision_with_boundaries(self.robot_state) == 1 or collision_with_boundaries(self.human_state) == 1:  # turn off for car scaling
+            # self.done = True
             collision_penalty += 0.000
 
         if wrong_hallway:

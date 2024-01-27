@@ -37,28 +37,29 @@ class IntentPredictionDataset(Dataset):
         subdirs = sorted(os.listdir(root_dir))
         num_total_data = len(subdirs)
         self.is_train = is_train
-        self.min_len = min_len = target_len
+        self.min_len = min_len
         self.use_habitat = use_habitat
         self.use_vlm = use_vlm
         indices = list(range(num_total_data))
         np.random.seed(seed)
         np.random.shuffle(indices)
         indices_shuffled = indices # should be the same for train, test, etc
+        safety_factor = 10
         if is_train:
             indices = indices_shuffled[:train_set_size]
         elif is_calibration:
-            indices = indices_shuffled[train_set_size:train_set_size+max_in_set]
+            indices = indices_shuffled[train_set_size:train_set_size+max_in_set+safety_factor]
         elif is_calibration_test:
-            indices = indices_shuffled[train_set_size+calibration_offset:train_set_size+calibration_offset+max_in_set]
+            indices = indices_shuffled[train_set_size+calibration_offset:train_set_size+calibration_offset+max_in_set+safety_factor]
         else:
             indices = indices_shuffled[train_set_size:]
 
         subdirs = [subdirs[i] for i in indices]
         self.traj_dict = OrderedDict()
-        self.target_len=target_len
+        self.target_len = min_len
         self.file_names = {}
         i = 0
-        for subdir in subdirs:
+        for subdir in subdirs[:max_in_set+20]:
             file_path = os.path.join(root_dir, subdir)
             if self.use_vlm:
                 file_path = os.path.join(file_path, "ground_truth.csv")
@@ -164,7 +165,8 @@ def collate_fn(data_list):
             ret_dict[k].append(d[k])
 
     for k in ret_keys:
-        ret_dict[k] = torch.nn.utils.rnn.pad_sequence(ret_dict[k], batch_first=True)
+        if type(ret_dict[k][0]) is torch.Tensor:
+            ret_dict[k] = torch.nn.utils.rnn.pad_sequence(ret_dict[k], batch_first=True)
 
     ret_dict["batch_size"] = len(data_list)
 

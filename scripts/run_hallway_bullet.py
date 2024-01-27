@@ -71,7 +71,10 @@ def run():
     parser.add_argument('--num-videos', type=int, default=0)
     parser.add_argument('--hide-intent', type=str2bool, default=False)
     parser.add_argument('--counterfactual-policy-load-path', type=str, default=None)
-    trigger_sync = TriggerWandbSyncHook()  # <--- New!
+    parser.add_argument('--record-video-only', type=str2bool, default=False)
+    parser.add_argument('--wandb', type=str2bool, default=False)
+    parser.add_argument('--online', type=str2bool, default=True)
+
 
     node = platform.node()
     if node == 'mae-majumdar-lab6' or node == "jlidard":
@@ -102,10 +105,13 @@ def run():
     n_eval_episodes = args["eval_episodes"]
     batch_size = args["batch_size"]
     num_videos = args["num_videos"]
+    record_video_only = args["record_video_only"]
     counterfactual_policy_load_path = args["counterfactual_policy_load_path"]
     use_counterfactual_policy = log_history
     intent_predictor_load_path = args["intent_predictor_load_path"]
     hide_intent = args["hide_intent"]
+    online = args["online"]
+    use_wandb = args["wandb"]
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -139,7 +145,7 @@ def run():
     else:
         intent_predictor = None
     env = SubprocVecEnv([make_bullet_env(i,
-                                         render=render,
+                                         render=render if not record_video_only else False,
                                          debug=debug,
                                          time_limit=max_steps,
                                          rgb_observation=rgb_observation,
@@ -164,16 +170,19 @@ def run():
         videnv = VecVideoRecorder(videnv, video_folder=logdir, record_video_trigger=lambda x: True, video_length=video_length)
 
 
+    if use_wandb:
+        if online:
+            wandb.init(
+                project="conformal_rl",
+            )
+        else:
+            trigger_sync = TriggerWandbSyncHook()  # <--- New!
 
-    if online:
-        wandb.init(
-            project="conformal_rl",
-        )
-    else:
-        wandb.init(
-            project="conformal_rl",
-            mode="offline"
-        )
+            wandb.init(
+                project="conformal_rl",
+                mode="offline"
+            )
+
 
     print('Training Policy.')
 
@@ -193,9 +202,11 @@ def run():
     best_mean_reward = -np.Inf
     total_metrics = []
     for iter in range(n_iters):
-        if intent_predictor is not None:
+        if not hide_intent:
             metrics = deploy_conformal_policy(videnv, model, episode_length=max_steps)
             total_metrics.append(metrics)
+        elif record_video_only:
+            record_video(videnv, model, video_length=video_length, num_videos=num_videos)
         else:
             if log_history:
                 evaluate_policy(model=model, env=env, n_eval_episodes=n_eval_episodes)
@@ -222,9 +233,9 @@ def run():
             if iter > 0 and iter % 50 == 0 and not log_history:
                 record_video(videnv, model, video_length=video_length, num_videos=num_videos)
 
-
-            wandb.log(training_dict)
-        if not online:
+            if wandb:
+                wandb.log(training_dict)
+        if not online and wandb:
             trigger_sync()  # <-- New!
     total_metrics = dict_collate(total_metrics, compute_mean=True)
     wandb.log(total_metrics)

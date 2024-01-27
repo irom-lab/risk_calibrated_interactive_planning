@@ -14,9 +14,9 @@ class IntentFormer(torch.nn.Module):
         self.encoder = self.create_encoder(hidden_dim, num_segments, params)
         self.decoder = self.create_decoder(hidden_dim, prediction_horizon, num_segments, params)
 
-    def forward(self, input, pos_history):
+    def forward(self, input, pos_history, intent_points):
         output = self.encoder(input, pos_history)
-        output = self.decoder(output)
+        output = self.decoder(output, intent_points)
         return output
 
     def create_encoder(self, hidden_dim, num_segments, params):
