@@ -334,7 +334,8 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                         non_conformity_score[i, batch_start_ind:batch_end_ind, t] = (1 - true_label_smx).squeeze(-1)
                     else:
                         dir = dir_name[0]
-                        print(f"VLM: {t} of {len(traj_windows)}. Dir name: {dir}")
+                        if i == 0:
+                            print(f"VLM: {t} of {len(traj_windows)}. Dir name: {dir}")
                         save_path = os.path.join(dir, f"time_{t}")
                         # score = processed_probs(dir)
 
@@ -594,7 +595,9 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                             "img_nonconformity": img_nonconformity}
 
                     for k,v in imgs.items():
-                        imgs_ret[f"{test_str}cal_risk_imgs_eps{epsilon}_temperature{temp}/" + k] = v
+                        temp_string = "%0.2f" % temp
+                        pre_string = f"{test_str}cal_risk_imgs_eps{epsilon}_temperature{temp_string}/"
+                        imgs_ret[pre_string + k] = v
 
             # TODO: aggregate over temperatures to find the best of each score per temp (nonsingleton, pred set size, coverage)
             parameter_set_sizes[i] = np.sum(parameter_set_size_list)
