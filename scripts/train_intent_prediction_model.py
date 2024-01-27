@@ -205,11 +205,11 @@ def run():
     output_len = future_horizon
     diff_order = 1
     hidden_size = hdim
-    delta = 0.05
-    epsilons = get_knowno_epsilon_values()[:2]
-    alpha0s = np.arange(0.01, 0.25, 0.001)[:2]
-    alpha0s_simpleset = np.linspace(0.01, 0.6, len(alpha0s))[:2]
-    alpha1s = np.arange(0.04, 1, 0.004)[:2]
+    delta = 0.01
+    epsilons = get_knowno_epsilon_values()[:5]
+    alpha0s = np.arange(0.01, 0.25, 0.001)[:5]
+    alpha0s_simpleset = np.linspace(0.01, 0.6, len(alpha0s))[:5]
+    alpha1s = np.arange(0.04, 1, 0.004)[:5]
     temperatures = np.arange(0, 1.801, 0.1)
     debug = True
     train_max_in_set = train_set_size
@@ -228,7 +228,7 @@ def run():
                                      is_calibration=True)
     cal_ds_test = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False,
                                      max_pred=future_horizon, debug=debug, min_len=traj_len,
-                                     max_in_set=calibration_set_size, use_habitat=use_habitat, use_vlm=use_vlm,
+                                     max_in_set=50, use_habitat=use_habitat, use_vlm=use_vlm,
                                      calibration_offset=calibration_set_size, is_calibration_test=True)
 
     if use_vlm:
@@ -243,7 +243,7 @@ def run():
     num_cal = cal_ds.__len__()
 
     # TODO: CHANGE BACK
-    num_thresh = 2
+    num_thresh = 10
     lambda_interval = 1 / num_thresh
     lambda_values = np.arange(0, 1, lambda_interval)
     if use_vlm:
