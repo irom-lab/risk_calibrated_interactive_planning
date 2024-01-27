@@ -334,12 +334,13 @@ def run():
     epochs = []
     train_losses = []
     test_losses = []
+    should_calibrate = False
 
     for epoch in range(num_epochs):
         data_dict = {}
         my_model.train()
 
-        if epoch % calibration_interval == 0:
+        if epoch % calibration_interval == 0 and should_calibrate:
 
             # Calibration phase
             risk_metrics, data_dict = run_calibration(args_namespace,
