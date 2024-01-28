@@ -148,15 +148,19 @@ def check_if_plan_exists(image_files, temperature):
     scores_filename = f'new_scores_temp_{temperature}.csv'
 
     plan = None
-    target_file_plan = os.path.join(image_files, plan_filename)
-    if Path(target_file_plan).is_file():
-        plan = pd.read_csv(target_file_plan)["plan"][0]
-
     scores = None
-    target_file_scores = os.path.join(image_files, scores_filename)
-    if Path(target_file_scores).is_file():
-        scores = pd.read_csv(target_file_scores)["scores"]
-        scores = torch.Tensor(scores)
+
+    try:
+        target_file_plan = os.path.join(image_files, plan_filename)
+        if Path(target_file_plan).is_file():
+            plan = pd.read_csv(target_file_plan)["plan"][0]
+
+        target_file_scores = os.path.join(image_files, scores_filename)
+        if Path(target_file_scores).is_file():
+            scores = pd.read_csv(target_file_scores)["scores"]
+            scores = torch.Tensor(scores)
+    except Exception as e:
+        pass
 
     return plan, scores
 

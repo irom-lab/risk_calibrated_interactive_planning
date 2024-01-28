@@ -94,12 +94,13 @@ def get_epoch_cost(dataloader, optimizer, scheduler, my_model, mse_loss, CE_loss
         batch_z = batch_dict["intent_full"][:, random_traj_len]
 
         if use_habitat:
+            batch_size = batch_X.shape[0]
             actions = batch_dict["all_actions"].cuda()
-            num_intent = actions.shape[-1] // 2
+            num_intent = batch_dict["num_intent"][:, random_traj_len].int().max()
             anchors =  batch_dict["obs_full"][:, random_traj_len, 7:7 + num_intent * 2]
             for z in range(num_intent):
                 anchors[:, 2 * z:2 * z + 2] -= batch_dict["obs_full"][:, random_traj_len, 1:3]
-            anchors = anchors.reshape(num_intent, 2)
+            anchors = anchors.reshape(batch_size, -1, 2)
             intent_points = anchors.cuda()
         else:
             intent_points = None
@@ -292,11 +293,11 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                     if not use_vlm:
                         if use_habitat:
                             traj_start = max((endpoint // 100) * 100 - 1, 0)
-                            num_intent = actions.shape[-1] // 2
+                            num_intent = batch_dict["num_intent"][:, t].int().item()
                             anchors = batch_X[:, t, 7:7+num_intent*2]
                             for z in range(num_intent):
                                 anchors[:, 2*z:2*z+2] -= batch_X[:, t, 1:3]
-                            anchors = anchors.reshape(num_intent, 2)
+                            anchors = anchors.reshape(1, -1, 2)
                             intent_points = anchors.cuda()
                         else:
                             traj_start = 0
@@ -308,7 +309,7 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                         y_weight_temp = y_weight * temp
                         y_weight_temp = y_weight_temp.softmax(dim=-1)
                         if use_habitat:
-                            action_set = actions[:, t].reshape(1, num_intent, 2)
+                            action_set = actions[:, t, :num_intent*2].reshape(1, -1, 2)
                         else:
                             action_set = torch.zeros((batch_size, y_weight.shape[1], 2)).cuda()
                             for intent in range(5):

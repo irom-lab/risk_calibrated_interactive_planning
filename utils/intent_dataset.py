@@ -14,7 +14,8 @@ class IntentPredictionDataset(Dataset):
     _habitat_robot_pos_index = 1
     _habitat_human_pos_index = 4
     _habitat_end_of_obs = -15
-    _habitat_max_obs = 200
+    _habitat_max_obs = 350
+    _habitat_max_total_actions = 20
 
     _hallway_robot_pos_index = 17
     _hallway_human_pos_index = 20
@@ -92,9 +93,13 @@ class IntentPredictionDataset(Dataset):
         #TODO: clean up for cleaner handling of environments.
 
         if self.use_habitat:
+            # hacky way to get variable num of intent
+            temp_hab = torch.Tensor(rollout_data.iloc[:, :].values)
+            num_intent = (torch.count_nonzero(temp_hab, 0) < torch.count_nonzero(temp_hab, 0).max() - 1).sum() // 2
+            num_intent = num_intent.item()
             robot_ind_start = self._habitat_robot_pos_index
             human_ind_start = self._habitat_human_pos_index
-            end_of_obs = self._habitat_end_of_obs
+            end_of_obs = -num_intent*2 - 1
         elif self.use_vlm:
             ground_truth_intent = rollout_data["Groundtruth"]
         else:
@@ -117,11 +122,14 @@ class IntentPredictionDataset(Dataset):
             max_obs_full[:, :obs_full.shape[1]] = obs_full
             obs_full = max_obs_full
             obs_history = max_obs
-            all_actions = torch.Tensor(rollout_data.iloc[:, -15:-1].values).cuda()
+            all_actions = torch.zeros(rollout_data.shape[0], self._habitat_max_total_actions)
+            all_actions[:, :num_intent*2] = torch.Tensor(rollout_data.iloc[:, end_of_obs:-1].values).cuda()
+            all_actions = torch.clamp(all_actions, min=-10, max=10)
         elif self.use_vlm:
             pass
         else:
             all_actions = torch.Tensor(rollout_data.iloc[:, -3:-1].values).cuda() # optimal action only
+            num_intent = 5
 
         if self.use_vlm:
             ret_dict = {"directory_name": filename,
@@ -148,6 +156,7 @@ class IntentPredictionDataset(Dataset):
                         "human_full_traj": human_full_traj,
                         "intent_gt": intent_gt,
                         "intent_full": intent_full,
+                        "num_intent": num_intent * torch.ones(rollout_data.shape[0], 1),
                     "all_actions": all_actions}
 
         return ret_dict

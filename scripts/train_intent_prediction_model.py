@@ -142,7 +142,7 @@ def run():
     num_intent= args["num_intent"]
     seed = args["seed"]
     if use_habitat:
-        traj_input_dim = 200 # args["traj_input_dim"]
+        traj_input_dim = 350 # args["traj_input_dim"]
     else:
         traj_input_dim = 121
 
@@ -176,7 +176,7 @@ def run():
         csv_dir = args["habitat_csv_dir"]
         anchors = None
         min_traj_len = 100
-        traj_len = 250
+        traj_len = 600
         load_model_path = load_model_path_habitat
         max_pred_len = 100
     elif use_vlm:
@@ -211,12 +211,12 @@ def run():
     diff_order = 1
     hidden_size = hdim
     delta = 0.01
-    epsilons = get_knowno_epsilon_values()[:2]
-    alpha0s = np.arange(0.01, 0.25, 0.001)[:2]
-    alpha0s_simpleset = np.linspace(0.01, 0.6, len(alpha0s))[:2]
-    alpha1s = np.arange(0.04, 1, 0.004)[:2]
+    epsilons =  np.array([0.15]) # get_knowno_epsilon_values()
+    alpha0s = np.array([0.15])  # np.arange(0.01, 0.25, 0.001)[:2]
+    alpha0s_simpleset = np.array([0.15])  # np.linspace(0.01, 0.6, len(alpha0s))[:2]
+    alpha1s = np.array([0.15])  # np.arange(0.04, 1, 0.004)[:2]
     temperatures = np.arange(0, 1.801, 0.1)
-    num_thresh = 2
+    num_thresh = 10
     lambda_interval = 1 / num_thresh
     lambda_values = np.arange(0, 1, lambda_interval)
     debug = True
@@ -321,7 +321,7 @@ def run():
 
     def lr_lambda(epoch):
         decay_fracs = [1, 0.5, 0.25, 0.125, 0.125/2]
-        epoch_drops = [0, 200, 300, 400, 500]
+        epoch_drops = [0, 30, 50, 100, 200]
         lowest_drop = 0
         i_lowest = 0
         for i, e in enumerate(epoch_drops):
