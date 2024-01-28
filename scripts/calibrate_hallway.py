@@ -45,7 +45,7 @@ def plot_figures(non_conformity_score, qhat, is_bullet=False, save_fig=False):
     # plot histogram and quantile
     plt.figure()
     plt.figure(figsize=(6, 2))
-    plt.hist(non_conformity_score, bins=30, edgecolor='k', linewidth=1)
+    plt.hist(non_conformity_score, bins=100, edgecolor='k', linewidth=1)
     plt.axvline(
         x=qhat, linestyle='--', color='r', label='Quantile value'
     )
@@ -82,7 +82,7 @@ def plot_nonsingleton_figure(lambdas, prediction_set_size, alpha=0.15, is_bullet
     )
     plt.xlabel('Prediction Set Threshold')
     plt.legend()
-    plt.axis((0, 1, 0, 1))
+    plt.axis((0, 1, 0, 0.6))
     if not is_bullet:
         name = 'hallway_set_size.png'
     else:
@@ -109,7 +109,7 @@ def plot_miscoverage_figure(lambdas, miscoverage_rate, alpha=0.15, is_bullet=Fal
         'Miscoverage Rate versus Prediction Threshold'
     )
     plt.xlabel('Threshold')
-    plt.axis((0, 1, 0, 1))
+    plt.axis((0, 1, 0, 0.25))
     plt.legend()
 
     if not is_bullet:

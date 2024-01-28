@@ -75,6 +75,7 @@ def run():
     parser.add_argument('--calibration-interval', type=int, default=5)
     parser.add_argument('--validation-interval', type=int, default=5)
     parser.add_argument('--calibration-set-size', type=int, default=500)
+    parser.add_argument('--calibration-test-set-size', type=int, default=50)
     parser.add_argument('--use-habitat', type=str2bool, default=False)
     parser.add_argument('--use-vlm', type=str2bool, default=False)
     parser.add_argument('--habitat-csv-dir', type=str, default=None)
@@ -134,6 +135,7 @@ def run():
     calibration_interval = args["calibration_interval"]
     validation_interval = args["validation_interval"]
     calibration_set_size = args["calibration_set_size"]
+    calibration_test_set_size = args["calibration_test_set_size"]
     entropy_coeff = args["entropy_coeff"]
     use_habitat = args["use_habitat"]
     use_vlm = args["use_vlm"]
@@ -176,11 +178,13 @@ def run():
         min_traj_len = 100
         traj_len = 250
         load_model_path = load_model_path_habitat
+        max_pred_len = 100
     elif use_vlm:
         csv_dir = args["vlm_csv_dir"]
         anchors = None
         traj_len = 8
         load_model_path = None
+        max_pred_len = 1
     else:
         anchors_y = torch.linspace(-5, 5, 5)
         anchors = torch.zeros(5, 2)
@@ -188,6 +192,7 @@ def run():
         min_traj_len = 20
         traj_len = 200
         load_model_path = load_model_path_hallway
+        max_pred_len = 100
 
     os.makedirs(logdir, exist_ok=True)
 
@@ -231,7 +236,7 @@ def run():
                                      is_calibration=True)
     cal_ds_test = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False,
                                      max_pred=future_horizon, debug=debug, min_len=traj_len,
-                                     max_in_set=50, use_habitat=use_habitat, use_vlm=use_vlm,
+                                     max_in_set=calibration_test_set_size, use_habitat=use_habitat, use_vlm=use_vlm,
                                      calibration_offset=calibration_set_size, is_calibration_test=True)
 
     if use_vlm:
@@ -316,7 +321,7 @@ def run():
 
     def lr_lambda(epoch):
         decay_fracs = [1, 0.5, 0.25, 0.125, 0.125/2]
-        epoch_drops = [0, 50, 80, 90, 100]
+        epoch_drops = [0, 200, 300, 400, 500]
         lowest_drop = 0
         i_lowest = 0
         for i, e in enumerate(epoch_drops):

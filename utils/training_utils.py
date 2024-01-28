@@ -588,15 +588,16 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                     knowno_calibration_thresholds_new[i] = qhat
                     img_miscoverage = plot_miscoverage_figure(lambdas, seq_miscoverage_instance[j], alpha=alpha0)
                     img_pred_set_size = plot_nonsingleton_figure(lambdas, seq_nonsingleton_instance[j], alpha=1)
-                    img_nonconformity = plot_figures(seq_non_conformity_score[j], qhat)
+                    img_nonconformity = plot_figures(seq_non_conformity_score[j], 1-qhat)
 
                     imgs = {"img_miscoverage": img_miscoverage,
                             "img_pred_set_size": img_pred_set_size,
                             "img_nonconformity": img_nonconformity}
 
                     for k,v in imgs.items():
-                        temp_string = "%0.2f" % temp
-                        pre_string = f"{test_str}cal_risk_imgs_eps{epsilon}_temperature{temp_string}/"
+                        eps_string = "%1.3f" %epsilon
+                        temp_string = "%1.1f" % temp
+                        pre_string = f"{test_str}cal_risk_imgs_eps{eps_string}_temperature{temp_string}/"
                         imgs_ret[pre_string + k] = v
 
             # TODO: aggregate over temperatures to find the best of each score per temp (nonsingleton, pred set size, coverage)
