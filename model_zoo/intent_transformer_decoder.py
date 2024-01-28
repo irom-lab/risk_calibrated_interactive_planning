@@ -53,10 +53,11 @@ class IntentFormerDecoder(torch.nn.Module):
         if intent_points is None:
             anchor_encoding = self.anchor_encoder_mlp(self.traj_anchors)
             tgt = anchor_encoding[None].repeat(B, 1, 1)
+            num_motion_modes = self.traj_anchors.shape[0]
         else:
             anchor_encoding = self.anchor_encoder_mlp(intent_points)
             tgt = anchor_encoding
-        num_motion_modes = anchor_encoding.shape[1]
+            num_motion_modes = anchor_encoding.shape[1]
 
         for layer in self.transformer_decoder_layers:
             x = layer(tgt, memory)
