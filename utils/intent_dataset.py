@@ -25,7 +25,7 @@ class IntentPredictionDataset(Dataset):
 
 
     def __init__(self, root_dir, train_set_size=5, is_train=True, max_pred=100, debug=False, min_len=10, target_len=200,
-                 max_in_set=None, use_habitat=False, use_vlm=False, calibration_offset=0, seed=1234, is_calibration=False,
+                 max_in_set=None, use_habitat=False, use_vlm=False, calibration_set_size=0, seed=1234, is_calibration=False,
                  is_calibration_test=False):
         """
         Arguments:
@@ -49,9 +49,9 @@ class IntentPredictionDataset(Dataset):
         if is_train:
             indices = indices_shuffled[:train_set_size]
         elif is_calibration:
-            indices = indices_shuffled[train_set_size:train_set_size+max_in_set+safety_factor]
+            indices = indices_shuffled[train_set_size+calibration_set_size:train_set_size+calibration_set_size+max_in_set+safety_factor]
         elif is_calibration_test:
-            indices = indices_shuffled[train_set_size+calibration_offset:train_set_size+calibration_offset+max_in_set+safety_factor]
+            indices = indices_shuffled[train_set_size+calibration_set_size:train_set_size+calibration_set_size+max_in_set+safety_factor]
         else:
             indices = indices_shuffled[train_set_size:]
 

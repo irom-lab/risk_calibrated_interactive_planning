@@ -48,16 +48,23 @@ def plot_pred(batch_X, robot_state_gt, human_state_gt, batch_z, y_pred, z_pred, 
     if use_habitat:
         robot_ind = 1
         human_ind = 4
+
+        fig = plt.figure()
+
+        plt.scatter(batch_X[batch, :, robot_ind], batch_X[batch, :, robot_ind + 2], c='black')
+        plt.scatter(batch_X[batch, :, human_ind], batch_X[batch, :, human_ind + 2], c='black')
+        plt.scatter(robot_state_gt[batch, :, 0], robot_state_gt[batch, :, 1], c='orange')
+        plt.scatter(human_state_gt[batch, :, 0], human_state_gt[batch, :, 1], c='orange')
     else:
         robot_ind = 17
         human_ind = 20
 
-    fig = plt.figure()
-
-    plt.scatter(batch_X[batch, :, robot_ind], batch_X[batch, :, robot_ind+1], c='black')
-    plt.scatter(batch_X[batch, :, human_ind], batch_X[batch, :, human_ind+1], c='black')
-    plt.scatter(robot_state_gt[batch, :, 0], robot_state_gt[batch, :, 1], c='orange')
-    plt.scatter(human_state_gt[batch, :, 0], human_state_gt[batch, :, 1], c='orange')
+        fig = plt.figure()
+    
+        plt.scatter(batch_X[batch, :, robot_ind], batch_X[batch, :, robot_ind+1], c='black')
+        plt.scatter(batch_X[batch, :, human_ind], batch_X[batch, :, human_ind+1], c='black')
+        plt.scatter(robot_state_gt[batch, :, 0], robot_state_gt[batch, :, 1], c='orange')
+        plt.scatter(human_state_gt[batch, :, 0], human_state_gt[batch, :, 1], c='orange')
 
     y_pred = y_pred.detach().cpu()
     z_pred = z_pred.detach().cpu()

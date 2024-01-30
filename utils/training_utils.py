@@ -203,7 +203,7 @@ def construct_simple_set(x, eps=0.75):
     return prediction_set, visited
 
 def get_prediction_thresholds(seq_miscoverage_instance, seq_nonsingleton_instance, alpha1, alpha2, num_calibration,
-                              lambdas, temperatures, delta, index_set, prefer_coverage=True):
+                              lambdas, temperatures, delta, index_set, prefer_coverage=True, knowno_default_temp=1):
     pval_miscoverage = hoeffding_bentkus(seq_miscoverage_instance, alpha_val=alpha1, n=num_calibration)
     pval_nonsingleton = hoeffding_bentkus(seq_nonsingleton_instance, alpha_val=alpha2, n=num_calibration)
 
@@ -230,7 +230,7 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                         num_intent=5, epsilons=0.15, alpha0s=0.15, alpha1s=0.15, alpha0s_simpleset=None, equal_action_mask_dist=0.05,
                         use_habitat=False, use_vlm=False, test_cal=False, delta=0.05, entropy_tresh=1,
                         calibration_thresholds=None, knowno_calibration_thresholds=None, knowno_temp=None,
-                        report_metrics=True, should_draw_heatmap=False):
+                        report_metrics=True, should_draw_heatmap=False, knowno_default_temp=1):
 
     cnt = 0
     num_temperatures = len(temperatures)
@@ -341,9 +341,10 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                         # score = processed_probs(dir)
 
 
-                        pred, score, text = get_action_distribution_from_image(args, save_path, t, temperature_llm=temp)
+                        pred, score, text = get_action_distribution_from_image(args, save_path, t, temperature_llm=knowno_default_temp)
                             # sleep(5)
                         score = score.cuda()
+                        score = score * temp
                         # score = score[0]
                         # score = score[None].repeat(num_temperatures, 1, 1)  # [num_temp, B, M]
 

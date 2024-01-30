@@ -185,6 +185,7 @@ def run():
         traj_len = 8
         load_model_path = None
         max_pred_len = 1
+        train_set_size = 1
     else:
         anchors_y = torch.linspace(-5, 5, 5)
         anchors = torch.zeros(5, 2)
@@ -237,7 +238,7 @@ def run():
     cal_ds_test = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False,
                                      max_pred=future_horizon, debug=debug, min_len=traj_len,
                                      max_in_set=calibration_test_set_size, use_habitat=use_habitat, use_vlm=use_vlm,
-                                     calibration_offset=calibration_set_size, is_calibration_test=True)
+                                     calibration_set_size=calibration_set_size, is_calibration_test=True)
 
     if use_vlm:
         collate_dict = collate_fn_stack_only
