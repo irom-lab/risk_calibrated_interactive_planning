@@ -113,6 +113,8 @@ def get_epoch_cost(dataloader, optimizer, scheduler, my_model, mse_loss, CE_loss
         y_weight = y_weight.softmax(dim=-1)
 
         loss_mse_list = []
+        time_range_ground_truth = batch_y.shape[1]
+        y_pred= y_pred[:, :, :time_range_ground_truth]
         for mode in range(y_pred.shape[1]):
             loss_mse = mse_loss(y_pred[:, mode], batch_y)
             loss_mse_list.append(loss_mse)
@@ -204,7 +206,7 @@ def construct_simple_set(x, eps=0.75):
     return prediction_set, visited
 
 def get_prediction_thresholds(seq_miscoverage_instance, seq_nonsingleton_instance, alpha1, alpha2, num_calibration,
-                              lambdas, temperatures, delta, index_set, prefer_coverage=True, knowno_default_temp=1):
+                              lambdas, temperatures, delta, index_set, prefer_coverage=False, knowno_default_temp=1):
     pval_miscoverage = hoeffding_bentkus(seq_miscoverage_instance, alpha_val=alpha1, n=num_calibration)
     pval_nonsingleton = hoeffding_bentkus(seq_nonsingleton_instance, alpha_val=alpha2, n=num_calibration)
 
@@ -358,7 +360,7 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                         # if score.sum() == 0:
                         #     score = torch.ones_like(score)
                         score = score.softmax(-1)
-                        score = torch.nan_to_num(score, 0)
+                        score = torch.nan_to_num(score, 1)
                         action_set_probs = score
                         true_label_smx = score[label]
                         non_conformity_score[i, batch_start_ind:batch_end_ind, t] = (1 - true_label_smx).squeeze(-1)
