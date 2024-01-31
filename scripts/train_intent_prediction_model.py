@@ -42,7 +42,7 @@ def get_params(traj_input_dim, num_intent):
               "num_transformer_encoder_layers": nlayer,
               "num_transformer_decoder_layers": nlayer,
               "coord_dim": coord_dim,
-              "out_coord_dim": 2,
+              "out_coord_dim": 3,
               "num_intent_modes": num_intent}
 
     return params

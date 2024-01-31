@@ -136,8 +136,8 @@ class IntentPredictionDataset(Dataset):
                         "intent_full": torch.Tensor(ground_truth_intent)}
         else:
 
-            robot_ind_end = robot_ind_start + 2
-            human_ind_end = human_ind_start + 2
+            robot_ind_end = robot_ind_start + 3
+            human_ind_end = human_ind_start + 3
             robot_state_gt = torch.Tensor(rollout_data.iloc[Tstop:Tstop+self.max_pred, robot_ind_start:robot_ind_end].values).cuda()
             human_state_gt = torch.Tensor(rollout_data.iloc[Tstop:Tstop+self.max_pred, human_ind_start:human_ind_end].values).cuda()
             human_state_history = torch.Tensor(rollout_data.iloc[:Tstop, human_ind_end].values).cuda()
