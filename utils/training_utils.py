@@ -383,8 +383,8 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
 
                     entropy_pred_set = action_set_probs.argmax(-1)
                     entropy_prediction_set_size[i, batch_start_ind:batch_end_ind, t] = 1
-                    entropy_nonsingleton_instance[i, batch_start_ind:batch_end_ind, t] = 0
-                    entropy_miscoverage_instance[i, batch_start_ind:batch_end_ind, t] = (label != entropy_pred_set.item() and entropy(action_set_probs) <= entropy_tresh)
+                    entropy_nonsingleton_instance[i, batch_start_ind:batch_end_ind, t] =  -entropy(action_set_probs) >= entropy_tresh
+                    entropy_miscoverage_instance[i, batch_start_ind:batch_end_ind, t] = (label != entropy_pred_set.item() and -entropy(action_set_probs) <= entropy_tresh)
 
 
             # save_processed_probs(dir, action_set_probs_list)
@@ -497,6 +497,8 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                 if test_cal:
                     optimal_lambda_index = calibration_thresholds[j][i] # Get RCIP threshold
                     i_knowno = knowno_calibration_thresholds[i] # Get KnowNo threshold
+                    optimal_lambda_index = int(optimal_lambda_index)
+                    i_knowno = int(i_knowno)
 
                 # Sequence level: RCIP and Knowno
                 optimal_nonsingleton_rate = seq_nonsingleton_instance[j, optimal_lambda_index].item()

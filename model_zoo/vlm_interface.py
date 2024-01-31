@@ -75,17 +75,22 @@ TOKENIZER_ABCDE_INDICES = [319, 350, 315, 360, 382]
 TOKENIZER_ABC_INDICES = [319, 350, 315, 360]
 
 # + f"For the <group_id> group of objects, what colors, functions, names, and sizes do you see? " \
-PROMPT_VLM = ("The first three images are different bins sorted by a human. Describe each of the bins "
-              "based on how they might be sorted, paying attention to notable semantic features of each object." 
-              "The human sorts based on features such as color, shape, user, function, and theme."
+PROMPT_VLM = ("The first three images are different bins sorted by a human. Describe the items in each of the bins."
+              "For each bin, describe the color first, then the theme, then the shapes."
+              # "The human sorts based on features such as color, shape, user, function, and theme."
+              "The human first prefers to group red or orange items together based on color. All colors must be similar to match this theme." 
+              "Look at the overall color of the objects, not at small details."
+              "If the color does not match, the human prefers to group items by theme, such as fruits, vegetables, cookware, sauces, tableware, or children's toys. "
+              "If the theme or color does not match, the human will group based on geometry, such as having a square shape."
               "The last image is the object we want to sort. Give a medium-length description for each bin and the object we want to sort."
               "Provide a ranking of the most-likely bins for the object."
+              "Refer to the bins as Bin 1, Bin 2, and Bin 3."
               # "Next, give a short explanation for how the object could be sorted into each bin, assuming a method exists."
               "Use the words bin or objects to refer to what is in the picture. Don't use the word image." )
  
 PROMPT_LLM = ("Here is a description of three bins and an object we want to sort.")
 
-OPTIONS = ["Fist Bin", "Second Bin", "Third Bin", "Unsure"]
+OPTIONS = ["Bin 1", "Bin 2", "Bin 3", "Unsure"]
 LETTER_CHOICES = ["A", "B", "C", "D"]
 
 PROMPT_DEBUG = "This is a set of four distinct images. What's in each image? List all objects you see."
