@@ -458,6 +458,7 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
 
             if test_cal:
                 i_knowno = knowno_calibration_thresholds[i]  # Get KnowNo threshold
+                i_knowno = int(i_knowno)
                 knowno_agg_prediction_set_size[i] = seq_prediction_set_size_stage[i_knowno_temp, i_knowno].item()
                 knowno_agg_task_success_rate = 1-seq_miscoverage_instance_stage[i_knowno_temp, i_knowno].item()
                 knowno_agg_help_rate = seq_nonsingleton_instance_stage[i_knowno_temp, i_knowno].item()
@@ -483,6 +484,7 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                 q_level = min(np.ceil((num_calibration + 1) * (1 - epsilon)) / num_calibration, 1)
                 qhat = 1-np.quantile(seq_non_conformity_score[j], q_level, method='higher')
                 i_knowno = np.abs((lambdas-qhat) * (lambdas-qhat) > 0).argmax() # find the closest lambda to knowno thresh, without going over
+                i_knowno = int(i_knowno)
 
                 # LTT versus knowno when coverage varies
                 sol = get_prediction_thresholds(seq_miscoverage_instance[j], seq_nonsingleton_instance[j], alpha0, 1, num_calibration,
