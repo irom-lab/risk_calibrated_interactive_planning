@@ -217,7 +217,7 @@ def run():
     alpha0s = np.array([0.15])  # np.arange(0.01, 0.25, 0.001)[:2]
     alpha0s_simpleset = np.array([0.15])  # np.linspace(0.01, 0.6, len(alpha0s))[:2]
     alpha1s = np.array([0.15])  # np.arange(0.04, 1, 0.004)[:2]
-    temperatures = np.arange(0, 1.801, 0.1)
+    temperatures = np.arange(0, 1, 0.01)
     num_thresh = 10
     lambda_interval = 1 / num_thresh
     lambda_values = np.arange(0, 1, lambda_interval)

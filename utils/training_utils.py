@@ -51,7 +51,8 @@ def run_calibration(args, cal_loader, my_model, eval_policy, lambda_values, temp
                                                         delta=delta,
                                                         use_vlm=use_vlm,
                                                         calibration_thresholds=calibration_thresholds,
-                                                            knowno_calibration_thresholds=knowno_calibration_thresholds)
+                                                        knowno_calibration_thresholds=knowno_calibration_thresholds,
+                                                        test_cal=test_cal)
     for k, img in calibration_img.items():
         data_dict[k] = wandb.Image(img)
     data_dict.update(risk_metrics)
@@ -344,15 +345,18 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                         pred, score, text = get_action_distribution_from_image(args, save_path, t, temperature_llm=knowno_default_temp)
                             # sleep(5)
                         score = score.cuda()
-                        score = score * temp
+
                         # score = score[0]
                         # score = score[None].repeat(num_temperatures, 1, 1)  # [num_temp, B, M]
 
                         if any(score.isnan()):
                             score = torch.ones_like(score)
                         # score = score * temp
-                        # score[0:3] -= score[-1]/3
-                        # score[-1] = -np.inf
+                        score[0:3] -= score[-1]/3
+                        score[-1] = -np.inf
+                        score = score * temp
+                        if score.sum() == 0:
+                            score = torch.ones_like(score)
                         score = score.softmax(-1)
                         action_set_probs = score
                         true_label_smx = score[label]

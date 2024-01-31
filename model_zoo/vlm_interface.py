@@ -78,6 +78,7 @@ TOKENIZER_ABC_INDICES = [319, 350, 315, 360]
 PROMPT_VLM = ("The first three images are different bins sorted by a human. Describe each of the bins "
               "based on how they might be sorted, paying attention to notable semantic features of each object." 
               "The last image is the object we want to sort. Give a medium-length description for each bin and the object we want to sort."
+              "Do not suggest a bin to place the object in."
               # "Next, give a short explanation for how the object could be sorted into each bin, assuming a method exists."
               "Use the words bin or objects to refer to what is in the picture. Don't use the word image." )
  
