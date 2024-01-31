@@ -323,7 +323,7 @@ def run():
     def lr_lambda(epoch):
         decay_fracs = [1, 0.5, 0.25, 0.125, 0.125/2]
         if use_habitat:
-            epoch_drops = [100, 200, 300, 400, 500]
+            epoch_drops = [500, 1000, 1100, 1200, 1300]
         else:
             epoch_drops = [0, 30, 50, 100, 200]
         lowest_drop = 0
