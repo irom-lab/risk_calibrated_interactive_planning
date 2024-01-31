@@ -355,9 +355,10 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                         score[0:3] -= score[-1]/3
                         score[-1] = -np.inf
                         score = score * temp
-                        if score.sum() == 0:
-                            score = torch.ones_like(score)
+                        # if score.sum() == 0:
+                        #     score = torch.ones_like(score)
                         score = score.softmax(-1)
+                        score = torch.nan_to_num(score, 0)
                         action_set_probs = score
                         true_label_smx = score[label]
                         non_conformity_score[i, batch_start_ind:batch_end_ind, t] = (1 - true_label_smx).squeeze(-1)
@@ -492,7 +493,7 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                 pval_nonsingleton = pvals["pval_nonsingleton"]
                 calibration_thresholds_new[j, i] = optimal_lambda
                 if test_cal:
-                    optimal_lambda_index = calibration_thresholds[j, i] # Get RCIP threshold
+                    optimal_lambda_index = calibration_thresholds[j][i] # Get RCIP threshold
                     i_knowno = knowno_calibration_thresholds[i] # Get KnowNo threshold
 
                 # Sequence level: RCIP and Knowno
@@ -590,7 +591,7 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                     risk_metrics[f"{test_str}cal_risk_analysis_eps{alpha0}/temperature{temp}_" + k] = v
 
                 # # get images
-                if i == len(epsilons)//2:
+                if i == i_knowno_temp:
                     knowno_calibration_thresholds_new[i] = qhat
                     img_miscoverage = plot_miscoverage_figure(lambdas, seq_miscoverage_instance[j], alpha=alpha0)
                     img_pred_set_size = plot_nonsingleton_figure(lambdas, seq_nonsingleton_instance[j], alpha=1)
@@ -609,8 +610,8 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
             # TODO: aggregate over temperatures to find the best of each score per temp (nonsingleton, pred set size, coverage)
             parameter_set_sizes[i] = np.sum(parameter_set_size_list)
 
-        risk_metrics["knowno_calibration_thresholds"] = list(calibration_thresholds_new)
-        risk_metrics["calibration_thresholds"] = list(knowno_calibration_thresholds_new)
+        risk_metrics["knowno_calibration_thresholds"] = list(knowno_calibration_thresholds_new)
+        risk_metrics["calibration_thresholds"] = list(calibration_thresholds_new)
 
         # Report the performance versus ablations as coverage bound varies
         if test_cal:
