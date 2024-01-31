@@ -95,6 +95,7 @@ def run():
     parser.add_argument("--use-llava", type=str2bool, default=False)
     parser.add_argument("--seed", type=int, default=12345678)
     parser.add_argument('--vlm-csv-dir', type=str, default=None)
+    parser.add_argument('--resume-lr', type=float, default=None)
 
 
 
@@ -206,7 +207,7 @@ def run():
     future_horizon = max_pred_len
     num_segments = 1
     params = get_params(traj_input_dim, num_intent)
-    learning_rate = 1e-4
+    learning_rate = 1e-4 if args["resume_lr"] is None else args["resume_lr"]
     max_epochs = 30
     output_len = future_horizon
     diff_order = 1
@@ -315,7 +316,7 @@ def run():
         my_model.load_state_dict(torch.load(load_model_path))
         print("Done loading.")
     # my_model = TransformerModel(len(input_cols), input_length, output_length=output_len)
-    optimizer = optim.Adam(my_model.parameters(), lr=1e-4)
+    optimizer = optim.Adam(my_model.parameters(), lr=learning_rate)
     # risk_evaluator = RiskEvaluator(self.intent, self.intent_predictor, self.threshold_values,
     #               self.epsilon_values, self.threshold_values_knowno,
     #               self.predict_interval, self.time_limit)
