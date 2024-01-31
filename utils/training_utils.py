@@ -83,7 +83,7 @@ def get_epoch_cost(dataloader, optimizer, scheduler, my_model, mse_loss, CE_loss
         else:
             my_model.eval()
 
-        random_traj_len = np.random.randint(low=min_len, high=traj_len-max_pred)
+        random_traj_len = np.random.randint(low=min_len, high=traj_len-5)
         if use_habitat:
             traj_start = max((random_traj_len // 100) * 100 - 1, 0)
         else:
@@ -228,9 +228,9 @@ def get_prediction_thresholds(seq_miscoverage_instance, seq_nonsingleton_instanc
     return lambda_hat_set, optimal_lambda, optimal_lambda_index, pvals, lambda_lb_nonsingleton, lambda_ub_miscoverage, valid_ltt
 
 def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperatures, num_cal, traj_len=100, predict_step_interval=10,
-                        num_intent=5, epsilons=0.15, alpha0s=0.15, alpha1s=0.15, alpha0s_simpleset=None, equal_action_mask_dist=0.05,
+                        num_intent=5, epsilons=0.15, alpha0s=0.15, alpha1s=0.15, alpha0s_simpleset=None, equal_action_mask_dist=1,
                         use_habitat=False, use_vlm=False, test_cal=False, delta=0.05, entropy_tresh=1,
-                        calibration_thresholds=None, knowno_calibration_thresholds=None, knowno_temp=None,
+                        calibration_thresholds=None, knowno_calibration_thresholds=None, i_knowno_temp=5,
                         report_metrics=True, should_draw_heatmap=False, knowno_default_temp=1):
 
     cnt = 0
@@ -457,15 +457,15 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
 
             if test_cal:
                 i_knowno = knowno_calibration_thresholds[i]  # Get KnowNo threshold
-                knowno_agg_prediction_set_size[i] = seq_prediction_set_size_stage[knowno_temp, i_knowno].item()
-                knowno_agg_task_success_rate = 1-seq_miscoverage_instance_stage[knowno_temp, i_knowno].item()
-                knowno_agg_help_rate = seq_nonsingleton_instance_stage[knowno_temp, i_knowno].item()
-                simple_set_agg_prediction_set_size = simple_seq_prediction_set_size[knowno_temp, i].item()
-                simple_set_agg_task_success_rate = 1-simple_seq_miscoverage_instance[knowno_temp, i].item()
-                simple_set_agg_help_rate = simple_seq_nonsingleton_instance[knowno_temp, i].item()
-                entropy_set_agg_prediction_set_size = entropy_prediction_set_size[knowno_temp, i].item()
-                entropy_set_agg_task_success_rate = 1-entropy_miscoverage_instance[knowno_temp, i].item()
-                entropy_set_agg_help_rate = entropy_nonsingleton_instance[knowno_temp, i].item()
+                knowno_agg_prediction_set_size[i] = seq_prediction_set_size_stage[i_knowno_temp, i_knowno].item()
+                knowno_agg_task_success_rate = 1-seq_miscoverage_instance_stage[i_knowno_temp, i_knowno].item()
+                knowno_agg_help_rate = seq_nonsingleton_instance_stage[i_knowno_temp, i_knowno].item()
+                simple_set_agg_prediction_set_size = simple_seq_prediction_set_size[i_knowno_temp, i].item()
+                simple_set_agg_task_success_rate = 1-simple_seq_miscoverage_instance[i_knowno_temp, i].item()
+                simple_set_agg_help_rate = simple_seq_nonsingleton_instance[i_knowno_temp, i].item()
+                entropy_set_agg_prediction_set_size = entropy_seq_prediction_set_size[i_knowno_temp].item()
+                entropy_set_agg_task_success_rate = 1-entropy_seq_miscoverage_instance[i_knowno_temp].item()
+                entropy_set_agg_help_rate = entropy_seq_nonsingleton_instance[i_knowno_temp].item()
 
             optimal_help_temp = []
             optimal_miscoverage_temp = []
@@ -481,7 +481,7 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
 
                 q_level = min(np.ceil((num_calibration + 1) * (1 - epsilon)) / num_calibration, 1)
                 qhat = 1-np.quantile(seq_non_conformity_score[j], q_level, method='higher')
-                i_knowno = np.abs(lambdas-qhat).argmin() # find the closest lambda to knowno thresh
+                i_knowno = np.abs((lambdas-qhat) * (lambdas-qhat) > 0).argmax() # find the closest lambda to knowno thresh, without going over
 
                 # LTT versus knowno when coverage varies
                 sol = get_prediction_thresholds(seq_miscoverage_instance[j], seq_nonsingleton_instance[j], alpha0, 1, num_calibration,
