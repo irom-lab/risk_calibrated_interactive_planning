@@ -311,7 +311,9 @@ def run():
 
     my_model = IntentFormer(hdim, num_segments, future_horizon, params=params).cuda()
     if load_model_path is not None:
+        print(f"Loading model from {load_model_path}...")
         my_model.load_state_dict(torch.load(load_model_path))
+        print("Done loading.")
     # my_model = TransformerModel(len(input_cols), input_length, output_length=output_len)
     optimizer = optim.Adam(my_model.parameters(), lr=1e-4)
     # risk_evaluator = RiskEvaluator(self.intent, self.intent_predictor, self.threshold_values,
