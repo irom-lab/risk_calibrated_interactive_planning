@@ -144,8 +144,8 @@ def check_if_description_exists(image_files, temperature):
     return description
 
 def check_if_plan_exists(image_files, temperature):
-    plan_filename = f'new_plan_temp_{temperature}.csv'
-    scores_filename = f'new_scores_temp_{temperature}.csv'
+    plan_filename = f'new_plan_single_token_temp_{temperature}.csv'
+    scores_filename = f'new_scores_single_token_temp_{temperature}.csv'
 
     plan = None
     scores = None
@@ -176,8 +176,8 @@ def save_description(image_files, description, temperature):
     return
 
 def save_plan(image_files, plan, scores, temperature):
-    plan_filename = f'new_plan_temp_{temperature}.csv'
-    scores_filename = f'new_scores_temp_{temperature}.csv'
+    plan_filename = f'new_plan_single_token_temp_{temperature}.csv'
+    scores_filename = f'new_scores_single_token_temp_{temperature}.csv'
 
     target_file_plan = os.path.join(image_files, plan_filename)
     target_file_scores = os.path.join(image_files, scores_filename)

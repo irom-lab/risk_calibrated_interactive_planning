@@ -145,7 +145,7 @@ def get_epoch_cost(dataloader, optimizer, scheduler, my_model, mse_loss, CE_loss
     img = None
     if not train:
         # get an example image for the last batch
-        img = plot_pred(batch_X, robot_state_gt, batch_y, batch_z, y_pred, y_weight)
+        img = plot_pred(batch_X, robot_state_gt, batch_y, batch_z, y_pred, y_weight, use_habitat=use_habitat)
 
     stats_dict = {"ce_cost": ce_cost,
                   "mse_cost": mse_cost,
