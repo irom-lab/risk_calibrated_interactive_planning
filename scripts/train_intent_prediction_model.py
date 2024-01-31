@@ -96,6 +96,7 @@ def run():
     parser.add_argument("--seed", type=int, default=12345678)
     parser.add_argument('--vlm-csv-dir', type=str, default=None)
     parser.add_argument('--resume-lr', type=float, default=None)
+    parser.add_argument('--num_temp', type=int, default=10)
 
 
 
@@ -212,12 +213,13 @@ def run():
     output_len = future_horizon
     diff_order = 1
     hidden_size = hdim
+    num_temp = args["num_temp"]
     delta = 0.01
     epsilons =  np.array([0.15]) # get_knowno_epsilon_values()
     alpha0s = np.array([0.15])  # np.arange(0.01, 0.25, 0.001)[:2]
     alpha0s_simpleset = np.array([0.15])  # np.linspace(0.01, 0.6, len(alpha0s))[:2]
     alpha1s = np.array([0.15])  # np.arange(0.04, 1, 0.004)[:2]
-    temperatures = np.arange(0, 1, 0.01)
+    temperatures = np.arange(0, 2, 1/num_temp)
     num_thresh = 10
     lambda_interval = 1 / num_thresh
     lambda_values = np.arange(0, 1, lambda_interval)
