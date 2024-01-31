@@ -77,8 +77,8 @@ TOKENIZER_ABC_INDICES = [319, 350, 315, 360]
 # + f"For the <group_id> group of objects, what colors, functions, names, and sizes do you see? " \
 PROMPT_VLM = ("The first three images are different bins sorted by a human. Describe each of the bins "
               "based on how they might be sorted, paying attention to notable semantic features of each object." 
-              "The last image is the object we want to sort. Give a medium-length description for each bin."
-              "List all possible bins where we could place the object."
+              "The last image is the object we want to sort. Give a medium-length description for each bin and the object we want to sort."
+              # "Next, give a short explanation for how the object could be sorted into each bin, assuming a method exists."
               "Use the words bin or objects to refer to what is in the picture. Don't use the word image." )
  
 PROMPT_LLM = ("Here is a description of three bins and an object we want to sort.")
@@ -134,7 +134,7 @@ def next_alpha(s):
 
 
 def check_if_description_exists(image_files, temperature):
-    description_filename = f'description_temp_{temperature}.csv'
+    description_filename = f'btest_new_description_single_token_temp_{temperature}.csv'
 
     description = None
     target_file_description = os.path.join(image_files, description_filename)
@@ -144,8 +144,8 @@ def check_if_description_exists(image_files, temperature):
     return description
 
 def check_if_plan_exists(image_files, temperature):
-    plan_filename = f'new_plan_single_token_temp_{temperature}.csv'
-    scores_filename = f'new_scores_single_token_temp_{temperature}.csv'
+    plan_filename = f'btest_new_plan2_single_token_temp_{temperature}.csv'
+    scores_filename = f'btest_new_scores2_single_token_temp_{temperature}.csv'
 
     plan = None
     scores = None
@@ -165,7 +165,7 @@ def check_if_plan_exists(image_files, temperature):
     return plan, scores
 
 def save_description(image_files, description, temperature):
-    description_filename = f'description_temp_{temperature}.csv'
+    description_filename = f'btest_new_description_single_token_temp_{temperature}.csv'
 
     target_file_description = os.path.join(image_files, description_filename)
 
@@ -176,8 +176,8 @@ def save_description(image_files, description, temperature):
     return
 
 def save_plan(image_files, plan, scores, temperature):
-    plan_filename = f'new_plan_single_token_temp_{temperature}.csv'
-    scores_filename = f'new_scores_single_token_temp_{temperature}.csv'
+    plan_filename = f'btest_new_plan2_single_token_temp_{temperature}.csv'
+    scores_filename = f'btest_new_scores2_single_token_temp_{temperature}.csv'
 
     target_file_plan = os.path.join(image_files, plan_filename)
     target_file_scores = os.path.join(image_files, scores_filename)

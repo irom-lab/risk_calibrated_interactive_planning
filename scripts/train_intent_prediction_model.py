@@ -86,7 +86,7 @@ def run():
     parser.add_argument("--model-base", type=str, default=None)
     parser.add_argument("--conv-mode", type=str, default=None)
     parser.add_argument("--sep", type=str, default=",")
-    parser.add_argument("--temperature", type=float, default=0.5)
+    parser.add_argument("--temperature", type=float, default=0.2)
     parser.add_argument("--top_p", type=float, default=None)
     parser.add_argument("--num_beams", type=int, default=1)
     parser.add_argument("--max_new_tokens", type=int, default=3000)
@@ -323,7 +323,7 @@ def run():
     def lr_lambda(epoch):
         decay_fracs = [1, 0.5, 0.25, 0.125, 0.125/2]
         if use_habitat:
-            epoch_drops = [500, 1000, 1100, 1200, 1300]
+            epoch_drops = [50, 150, 250, 350]
         else:
             epoch_drops = [0, 30, 50, 100, 200]
         lowest_drop = 0

@@ -45,7 +45,7 @@ def plot_figures(non_conformity_score, qhat, is_bullet=False, save_fig=False):
     # plot histogram and quantile
     plt.figure()
     plt.figure(figsize=(6, 2))
-    plt.hist(non_conformity_score, bins=100, edgecolor='k', linewidth=1)
+    plt.hist(non_conformity_score, bins=30, edgecolor='k', linewidth=1)
     plt.axvline(
         x=qhat, linestyle='--', color='r', label='Quantile value'
     )
