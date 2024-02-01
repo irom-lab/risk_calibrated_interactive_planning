@@ -267,6 +267,8 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
         model.eval()
     index_set = list(range(len(lambdas)))
 
+    score_logit_thresh = 1
+
     with torch.no_grad():
         for batch_dict in dataloader_tqdm:
             action_set_probs_list = []
@@ -363,6 +365,13 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                         score = torch.nan_to_num(score, 1)
                         action_set_probs = score
                         true_label_smx = score[label]
+                        top_label = score.argmax(-1)
+                        top_label_smx = score.max()
+                        is_top2 = label == score.topk(2).indices[-1]
+                        is_within_thresh = []
+                        if top_label != label and is_top2:
+                            # replace the label in post processing
+                            true_label_smx = top_label_smx
                         non_conformity_score[i, batch_start_ind:batch_end_ind, t] = (1 - true_label_smx).squeeze(-1)
                         # action_set_probs_list.append(score)
 

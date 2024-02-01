@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import io
+
+import torch
 from matplotlib.transforms import Affine2D
 from scipy.stats import multivariate_normal
 
@@ -70,7 +72,8 @@ def plot_pred(batch_X, robot_state_gt, human_state_gt, batch_z, y_pred, z_pred, 
     z_pred = z_pred.detach().cpu()
 
     for mode in range(y_pred.shape[1]):
-        plt.scatter(y_pred[batch, mode, :, 0], y_pred[batch, mode, :, 1], alpha=z_pred[batch, mode].item(), c='b')
+        alpha = torch.nan_to_num(z_pred[batch, mode].item(), 0)
+        plt.scatter(y_pred[batch, mode, :, 0], y_pred[batch, mode, :, 1], alpha=alpha, c='b')
     plt.axis((-6, 6, -4.5, 4.5))
 
     img = get_img_from_fig(fig)
