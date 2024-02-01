@@ -267,7 +267,7 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
         model.eval()
     index_set = list(range(len(lambdas)))
 
-    score_logit_thresh = 1
+    score_logit_thresh = 100
 
     with torch.no_grad():
         for batch_dict in dataloader_tqdm:
@@ -368,8 +368,8 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                         top_label = score.argmax(-1)
                         top_label_smx = score.max()
                         is_top2 = label == score.topk(2).indices[-1]
-                        is_within_thresh = []
-                        if top_label != label and is_top2:
+                        is_within_thresh = torch.abs(top_label_smx - true_label_smx) < score_logit_thresh
+                        if top_label != label and is_within_thresh:
                             # replace the label in post processing
                             true_label_smx = top_label_smx
                         non_conformity_score[i, batch_start_ind:batch_end_ind, t] = (1 - true_label_smx).squeeze(-1)
