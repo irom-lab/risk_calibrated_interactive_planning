@@ -199,7 +199,7 @@ def plot_prediction_set_size_versus_success(prediction_set_size, task_success_ra
     ax2.set_ylabel('Plan Miscoverage Rate')
     ax2.set_xlabel('Human Help Rate')
     ax2.set_xlim([-0.02, 1])
-    ax2.set_ylim([0.375, 1])
+    ax2.set_ylim([0.4, 1])
     # plt.axis('equal')
     # major_ticks_x = [0, 0.2, 0.4, 0.6, 0.8, 1]
     # major_ticks_y = [0.6, 0.7, 0.8, 0.9, 1.0]
@@ -303,7 +303,8 @@ def get_knowno_epsilon_values(miscoverage_max=0.4, return_len=5):
     indices = list(range(len(knowno_coverage_range)))
     test_eps_vals = [knowno_test_eval(eps_coverage=e) for e in knowno_coverage_range]
     test_eps = [(i, j, k) for (i,j,k) in zip(indices, knowno_coverage_range, test_eps_vals)]
-    test_eps_vals = np.unique(test_eps_vals)
+    test_eps_vals = np.unique(test_eps_vals)[::return_len]
+    knowno_coverage_range = knowno_coverage_range[::return_len]
     return knowno_coverage_range, test_eps_vals
 
 

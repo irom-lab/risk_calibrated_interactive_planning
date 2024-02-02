@@ -216,13 +216,13 @@ def run():
     num_temp = args["num_temp"]
     delta = 0.01
     miscoverage_max = 0.4
-    every_other_val = 1
-    return_len=5
+    return_len=40
     alpha0s, eps_knowno = get_knowno_epsilon_values(return_len=return_len)
+    print(alpha0s.shape)
     epsilons = eps_knowno
     alpha0s = alpha0s
     alpha0s_simpleset = np.linspace(.1, 1, len(eps_knowno))
-    alpha1s = np.linspace(0.1, 0.5, len(eps_knowno)) # np.arange(0.04, 1, 0.004)[:2]
+    alpha1s = np.linspace(0.4, 1.0, len(eps_knowno)) # np.arange(0.04, 1, 0.004)[:2]
     temperatures = np.linspace(0, 0.7, num_temp)
     temperatures[0] = 1
     num_thresh = 200

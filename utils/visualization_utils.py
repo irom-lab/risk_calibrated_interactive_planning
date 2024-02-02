@@ -107,7 +107,6 @@ def draw_heatmap(alpha1s, alpha2s, parameter_set_sizes, xmax=1, ymax=0.15):
     ax = plt.gca()
     im = ax.imshow(img, cmap='viridis', extent=(0, xmax, 0, ymax), origin='lower', aspect='auto')
 
-    plt.grid()
     ax = plt.gca()
     divider = make_axes_locatable(ax)
     cbar, cax = add_colorbar(im, aspect=20, pad_fraction=0.5)

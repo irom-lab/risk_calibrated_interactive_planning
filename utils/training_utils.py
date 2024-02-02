@@ -174,7 +174,7 @@ def make_obs_dict_hallway(obs, intent, intent_index):
 def fixed_sequence_testing(lambdas, pvals, delta, index_set, temperatures, bound_help=False):
     lambda_hat = []
     pvals_set = []
-    union_bound_correction = len(index_set) * len(temperatures)
+    union_bound_correction =  len(temperatures) * len(index_set)
     for k in index_set:
         j = k
         lam = lambdas[j]
@@ -208,10 +208,12 @@ def entropy(x):
 def construct_simple_set(x, eps=0.75):
     prediction_set = []
     visited = []
+    running_sum = 0
     for ii in range(x.shape[-1]):
         jj = x.topk(ii+1).indices[-1]
         visited.append(jj)
         prediction_set.append(x[jj])
+        running_sum += x[jj]
         sum = torch.Tensor(prediction_set).sum()
         if sum > eps:
             break
@@ -246,7 +248,7 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                         num_intent=5, epsilons=0.15, alpha0s=0.15, alpha1s=0.15, alpha0s_simpleset=None, equal_action_mask_dist=1,
                         use_habitat=False, use_vlm=False, test_cal=False, delta=0.05, entropy_thresh=1,
                         calibration_thresholds=None, knowno_calibration_thresholds=None, calibration_temps=None, i_knowno_temp=0,
-                        report_metrics=True, should_draw_heatmap=True, knowno_default_temp=1, num_index=10):
+                        report_metrics=True, should_draw_heatmap=True, knowno_default_temp=1, num_index=100):
 
     cnt = 0
     num_temperatures = len(temperatures)
@@ -290,6 +292,13 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
     score_logit_thresh = 29.5
     second_place_logit_thresh = 0.5
     p_thresh = 1
+
+    if use_vlm:
+        cal_str = "vlm_"
+    elif use_habitat:
+        cal_str = "habitat_"
+    else:
+        cal_str = "hallway_"
 
     with torch.no_grad():
         for batch_dict in dataloader_tqdm:
@@ -496,7 +505,9 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
         entropy_set_agg_help_rate = np.zeros(num_epsilons)
         parameter_set_sizes = np.zeros(num_epsilons)
         knowno_calibration_thresholds_new = np.zeros(num_epsilons)
-        calibration_thresholds_new = np.zeros((num_temperatures, num_epsilons))
+        calibration_thresholds_new = np.zeros(num_epsilons)
+        temp_thresholds_new = np.zeros(num_epsilons)
+        best_help_rates = 2*np.ones(num_epsilons)
 
         for i in range(len(alpha0s)):
             print(f"Processing: bound {i}.")
@@ -519,7 +530,6 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
             optimal_miscoverage_temp = []
             optimal_pset_size = []
             parameter_set_size_list = []
-            eps_rcip_nonsingleton_rate_best_temp = np.inf
 
             for j in range(len(temperatures)):
                 temp = temperatures[j]
@@ -539,7 +549,6 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                 combined_pval = pvals["combined_pval"]
                 pval_miscoverage = pvals["pval_miscoverage"]
                 pval_nonsingleton = pvals["pval_nonsingleton"]
-                calibration_thresholds_new[j, i] = optimal_lambda_index
                 if test_cal:
                     optimal_lambda_index = calibration_thresholds[i] # Get RCIP threshold
                     i_knowno = knowno_calibration_thresholds[i] # Get KnowNo threshold
@@ -554,6 +563,12 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                 knowno_nonsingleton_rate = seq_nonsingleton_instance[j, i_knowno].item()
                 knowno_miscoverage_rate = seq_miscoverage_instance[j, i_knowno].item()
                 knowno_prediction_set_size = seq_prediction_set_size[j, i_knowno].item()
+
+                # update thresholds
+                if optimal_nonsingleton_rate < best_help_rates[i]:
+                    temp_thresholds_new[i] = j
+                    calibration_thresholds_new[i] = optimal_lambda_index
+                    best_help_rates[i] = optimal_nonsingleton_rate
 
 
                 # Stage level: RCIP and KnowNo
@@ -663,8 +678,8 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
             parameter_set_sizes[i] = np.sum(parameter_set_size_list)
 
         risk_metrics["knowno_calibration_thresholds"] = list(knowno_calibration_thresholds_new)
-        risk_metrics["calibration_thresholds"] = list(calibration_thresholds_new.max(0))
-        risk_metrics["calibration_temps"] = list(calibration_thresholds_new.argmax(0))
+        risk_metrics["calibration_thresholds"] = list(calibration_thresholds_new)
+        risk_metrics["calibration_temps"] = list(temp_thresholds_new)
 
         # Report the performance versus ablations as coverage bound varies
         if test_cal:
@@ -675,19 +690,49 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                 entropy_set_agg_prediction_set_size, entropy_set_agg_task_success_rate, entropy_set_agg_help_rate,
                 no_help_agg_task_success_rate
             )
-
+            import pandas as pd
+            import time
+            from PIL import Image
+            save_path = '/home/jlidard/PredictiveRL/results'
+            nano_string = "ablation_" + cal_str + str(time.time_ns())
+            save_dir = os.path.join(save_path, nano_string)
+            os.makedirs(save_dir, exist_ok=True)
+            save_path = os.path.join(save_path, nano_string, 'results_ablation.pkl')
+            data_dict = {
+                "agg_prediction_set_size": agg_prediction_set_size,
+                "agg_task_success_rate": agg_task_success_rate,
+                "agg_help_rate": agg_help_rate,
+                "knowno_agg_prediction_set_size": knowno_agg_prediction_set_size,
+                "knowno_agg_task_success_rate": knowno_agg_task_success_rate,
+                "knowno_agg_help_rate": knowno_agg_help_rate,
+                "simple_set_agg_prediction_set_size": simple_set_agg_task_success_rate,
+                "simple_set_agg_help_rate": simple_set_agg_help_rate,
+                "entropy_set_agg_prediction_set_size": entropy_set_agg_prediction_set_size,
+                "entropy_set_agg_task_success_rate": entropy_set_agg_task_success_rate,
+                "entropy_set_agg_help_rate": entropy_set_agg_help_rate,
+                "no_help_agg_task_success_rate": no_help_agg_task_success_rate
+            }
+            import pickle
+            with open(save_path, 'wb') as f:
+                pickle.dump(data_dict, f)
+            img_coverage.save(os.path.join(save_dir,'plot.png'))
             imgs_ret[f"{test_str}cal_risk_imgs_figures/results"] = img_coverage
+            img_coverage.save(os.path.join(save_dir, 'plot.png'))
             import matplotlib.pyplot as plt
             plt.imshow(img_coverage)
             plt.show()
+
+    should_draw_heatmap = False
     if should_draw_heatmap and not test_cal:
-        parameter_set_size_list = np.zeros(len(alpha0s) * len(alpha1s) // 4)
+
 
         eps_rcip_miscoverage_rate_best_temp = np.inf
 
         l = 0
         alpha0s_heatmap = alpha0s[::2]
         alpha1s_heatmap = alpha1s[::2]
+
+        parameter_set_size_list = np.zeros(len(alpha0s_heatmap)*len(alpha1s_heatmap))
 
         for i in range(len(alpha0s_heatmap)):
 
@@ -735,6 +780,23 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
 
         imgs_ret[f"{test_str}cal_risk_imgs_figures/results"] = img_help
         import matplotlib.pyplot as plt
+        import pandas as pd
+        import time
+        from PIL import Image
+        save_path = '/home/jlidard/PredictiveRL/results'
+        nano_string = "helpbound_" + cal_str + str(time.time_ns())
+        save_dir = os.path.join(save_path, nano_string)
+        os.makedirs(save_dir, exist_ok=True)
+        save_path = os.path.join(save_path, nano_string, 'results_helpbounds.pkl')
+        data_dict = {
+            "alpha0s_heatmap": alpha0s_heatmap,
+            "alpha1s_heatmap": alpha1s_heatmap,
+            "parameter_set_size_list": parameter_set_size_list
+        }
+        import pickle
+        with open(save_path, 'wb') as f:
+            pickle.dump(data_dict, f)
+        img_help.save(os.path.join(save_dir, 'plot.png'))
         plt.imshow(img_help)
         # plt.show()
 

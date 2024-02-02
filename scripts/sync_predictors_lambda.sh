@@ -1,6 +1,6 @@
 scp jlidard@128.112.36.155:/home/jlidard/rcip/trained_models/hallwayepoch450.pth ~/rcip/trained_models/trained_models_2/hallwayepoch450.pth
 
-scp jlidard@128.112.36.155:/home/jlidard/rcip/trained_models/habitatepoch300.pth ~/rcip/trained_models/trained_models_2/habitatepoch300.pth
+scp jlidard@128.112.36.155:/home/jlidard/rcip/trained_models/habitatepoch100.pth ~/rcip/trained_models/trained_models_2/habitatepoch100.pth
 
 #
 #echo "pulling models"
