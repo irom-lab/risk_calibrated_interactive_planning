@@ -215,14 +215,19 @@ def run():
     hidden_size = hdim
     num_temp = args["num_temp"]
     delta = 0.01
-    epsilons =  np.array([0.15]) # get_knowno_epsilon_values()
-    alpha0s = np.array([0.15])  # np.arange(0.01, 0.25, 0.001)[:2]
-    alpha0s_simpleset = np.array([0.15])  # np.linspace(0.01, 0.6, len(alpha0s))[:2]
-    alpha1s = np.array([0.15])  # np.arange(0.04, 1, 0.004)[:2]
-    temperatures = np.linspace(0, 0.2, num_temp)
-    num_thresh = 10
+    miscoverage_max = 0.4
+    every_other_val = 1
+    return_len=5
+    alpha0s, eps_knowno = get_knowno_epsilon_values(return_len=return_len)
+    epsilons = eps_knowno
+    alpha0s = alpha0s
+    alpha0s_simpleset = np.linspace(.1, 1, len(eps_knowno))
+    alpha1s = np.linspace(0.1, 0.5, len(eps_knowno)) # np.arange(0.04, 1, 0.004)[:2]
+    temperatures = np.linspace(0, 0.7, num_temp)
+    temperatures[0] = 1
+    num_thresh = 200
     lambda_interval = 1 / num_thresh
-    lambda_values = np.arange(0, 1, lambda_interval)
+    lambda_values = np.linspace(0, 0.7, num_thresh)
     debug = True
     train_max_in_set = train_set_size
 
@@ -236,12 +241,12 @@ def run():
                                       max_in_set=train_max_in_set)
     cal_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False,
                                      max_pred=future_horizon, debug=debug, min_len=traj_len,
-                                     max_in_set=calibration_set_size, use_habitat=use_habitat, use_vlm=use_vlm,
+                                     max_in_set=calibration_set_size, use_habitat=use_habitat, seed=seed, use_vlm=use_vlm,
                                      is_calibration=True)
     cal_ds_test = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False,
                                      max_pred=future_horizon, debug=debug, min_len=traj_len,
                                      max_in_set=calibration_test_set_size, use_habitat=use_habitat, use_vlm=use_vlm,
-                                     calibration_set_size=calibration_set_size, is_calibration_test=True)
+                                     calibration_set_size=calibration_set_size, seed=seed, is_calibration_test=True)
 
     if use_vlm:
         collate_dict = collate_fn_stack_only
@@ -283,6 +288,7 @@ def run():
 
         knowno_calibration_thresholds = risk_metrics["knowno_calibration_thresholds"]
         calibration_thresholds = risk_metrics["calibration_thresholds"]
+        calibration_temps = risk_metrics["calibration_temps"]
 
         _, data_dict = run_calibration(args_namespace,
                         cal_loader_test,
@@ -306,6 +312,7 @@ def run():
                         0,
                         calibration_thresholds=calibration_thresholds,
                         knowno_calibration_thresholds=knowno_calibration_thresholds,
+                        calibration_temps=calibration_temps,
                         test_cal=True)
 
         wandb.log(data_dict)
@@ -381,6 +388,7 @@ def run():
                                                   epoch)
                 knowno_calibration_thresholds = risk_metrics["knowno_calibration_thresholds"]
                 calibration_thresholds = risk_metrics["calibration_thresholds"]
+                calibration_temps = risk_metrics["calibration_temps"]
 
                 _, data_dict = run_calibration(args_namespace,
                                 cal_loader_test,
@@ -404,6 +412,7 @@ def run():
                                 epoch,
                                 calibration_thresholds=calibration_thresholds,
                                 knowno_calibration_thresholds=knowno_calibration_thresholds,
+                                calibration_temps=calibration_temps,
                                 test_cal=True)
 
             save_model(my_model, use_habitat, use_vlm, epoch)

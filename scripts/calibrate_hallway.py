@@ -164,47 +164,58 @@ def plot_prediction_set_size_versus_success(prediction_set_size, task_success_ra
                                             no_help_task_success_rate, save_fig=False):
 
     # plot histogram and quantile
-    f, (ax1, ax2) = plt.subplots(ncols=2, figsize=(32, 9))
-    ax1.plot(prediction_set_size, task_success_rate, label='RCIP', linewidth=3)
-    ax1.plot(knowno_prediction_set_size, knowno_task_success_rate, label='KnowNo', linewidth=3)
-    ax1.plot(simple_set_prediction_set_size, simple_set_task_success_rate, label='Simple Set', linewidth=3)
-    ax1.plot(entropy_set_prediction_set_size, entropy_set_task_success_rate, label='Entropy Set', linewidth=3)
-    ax1.set_ylabel('Task Success Rate')
-    ax1.set_xlabel('Prediction Set Size')
-    ax1.set_xlim([1, 5])
-    ax1.set_ylim([.6, 1])
-    major_ticks_x = [1, 2, 3, 4, 5]
-    major_ticks_y = [0.6, 0.7, 0.8, 0.9, 1.0]
-    ax1.set_xticks(major_ticks_x)
-    ax1.set_yticks(major_ticks_y)
-    label_with_arrow(ax1, r'lower $\alpha_2$', xy=(0.42, 0.5), xytext=(0.35, 0.3),
-                     arrowprops=dict(facecolor='black', arrowstyle='->', lw=3, linestyle='dashed'))
+    # f, (ax1, ax2) = plt.subplots(ncols=2, figsize=(32, 9))
+    # ax1.plot(prediction_set_size, task_success_rate, label='RCIP', linewidth=3)
+    # ax1.plot(knowno_prediction_set_size, knowno_task_success_rate, label='KnowNo', linewidth=3)
+    # ax1.plot(simple_set_prediction_set_size, simple_set_task_success_rate, label='Simple Set', linewidth=3)
+    # # ax1.plot(entropy_set_prediction_set_size, entropy_set_task_success_rate, label='Entropy Set', linewidth=3)
+    # ax1.set_ylabel('Task Success Rate')
+    # ax1.set_xlabel('Prediction Set Size')
+    # ax1.set_xlim([0, 5])
+    # ax1.set_ylim([0, 1])
+    # major_ticks_x = [1, 2, 3, 4, 5]
+    # major_ticks_y = [0.6, 0.7, 0.8, 0.9, 1.0]
+    # ax1.set_xticks(major_ticks_x)
+    # ax1.set_yticks(major_ticks_y)
+    # label_with_arrow(ax1, r'lower $\alpha_2$', xy=(0.42, 0.5), xytext=(0.35, 0.3),
+    #                  arrowprops=dict(facecolor='black', arrowstyle='->', lw=3, linestyle='dashed'))
+
+    font = {
+            # 'weight': 'bold',
+            'size': 26}
+
+    matplotlib.rc('font', **font)
+
+    f, ax2 = plt.subplots(1, figsize=(10, 10))
 
     # label_with_arrow(ax1, 'lower ε', xy=(1, 0.9), xytext=(0.95, 0.8),
     #                  arrowprops=dict(facecolor='black', arrowstyle='->'))
 
-    ax2.plot(prediction_set_size, task_success_rate, linewidth=3)
-    ax2.plot(knowno_prediction_set_size, knowno_task_success_rate, linewidth=3)
-    ax2.plot(simple_set_prediction_set_size, simple_set_task_success_rate, linewidth=3)
-    ax2.plot(entropy_set_prediction_set_size, entropy_set_task_success_rate, linewidth=3)
-    ax2.scatter(np.zeros_like(no_help_task_success_rate), no_help_task_success_rate, s=500, marker="*", label="No help")
-    ax2.set_ylabel('Task Success Rate')
+    ax2.plot(help_rate, task_success_rate, linewidth=5, label="RCIP (ours)", c='C1')
+    ax2.plot(knowno_help_rate, knowno_task_success_rate, linewidth=5, label="KnowNo", c='#1f77b4')
+    ax2.plot(simple_set_help_rate, simple_set_task_success_rate, linewidth=5, label="Simple Set", c='C2')
+    ax2.scatter(entropy_set_help_rate, entropy_set_task_success_rate, s=1000, marker="*", label="Entropy Set", color='m')
+    ax2.scatter(np.zeros_like(no_help_task_success_rate), no_help_task_success_rate, s=1000, marker="*", label="No help", color='black')
+    ax2.set_ylabel('Plan Miscoverage Rate')
     ax2.set_xlabel('Human Help Rate')
-    ax2.set_xlim([0, 1])
-    ax2.set_ylim([.6, 1])
-    major_ticks_x = [0, 0.2, 0.4, 0.6, 0.8, 1]
-    major_ticks_y = [0.6, 0.7, 0.8, 0.9, 1.0]
-    ax2.set_xticks(major_ticks_x)
-    ax2.set_yticks(major_ticks_y)
+    ax2.set_xlim([-0.02, 1])
+    ax2.set_ylim([0.375, 1])
+    # plt.axis('equal')
+    # major_ticks_x = [0, 0.2, 0.4, 0.6, 0.8, 1]
+    # major_ticks_y = [0.6, 0.7, 0.8, 0.9, 1.0]
+    # ax2.set_xticks(major_ticks_x)
+    # ax2.set_yticks(major_ticks_y)
     labels = [item.get_text() for item in ax2.get_xticklabels()]
     labels[0] = "0"
     labels[-1] = "1"
     # Beat them into submission and set them back again
     ax2.set_xticklabels(labels)
-    label_with_arrow(ax2, r'lower $\alpha_1$', xy=(0.92, 0.5), xytext=(0.85, 0.3),
+    ax2.xaxis.set_ticks_position('bottom')
+    ax2.yaxis.set_ticks_position('left')
+    label_with_arrow(ax2, r'lower $\alpha_1$', xy=(0.9, 0.4), xytext=(0.6, 0.25),
                      arrowprops=dict(facecolor='black', arrowstyle='->', lw=3, linestyle='dashed'))
 
-    f.legend(loc="lower center", ncol=5, frameon=False)
+    f.legend(loc="lower center", ncol=3, frameon=False)
 
     # Adjust the layout to make room for the shared legend
     f.tight_layout(rect=[0, 0.1, 1, 1])
@@ -217,28 +228,32 @@ def plot_prediction_set_size_versus_success(prediction_set_size, task_success_ra
     return get_img_from_fig(plt.gcf())
 
 
-def plot_prediction_success_versus_help_bound(task_success_rate, help_rate_bound, temperature, save_fig=False):
+def plot_prediction_success_versus_help_bound(task_success_rate, help_rate_bound, set_size, save_fig=False):
+    font = {
+            # 'weight': 'bold',
+            'size': 26}
 
+    matplotlib.rc('font', **font)
     # plot histogram and quantile
     f, ax1 = plt.subplots(ncols=1, figsize=(16, 9))
-    sc = ax1.scatter(help_rate_bound, task_success_rate, s=400, c=temperature, cmap="turbo", vmin=temperature.min(),
-                vmax=temperature.max())
+    sc = ax1.scatter(help_rate_bound, task_success_rate, s=400, c=set_size, cmap="plasma", vmin=set_size.min(),
+                vmax=set_size.max())
     ax1.set_xlabel('Help Rate Bound')
     ax1.set_ylabel('RCIP Parameter Set Size')
-    ax1.set_xlim([0, 0.2])
-    ax1.set_ylim([0, 10])
-    major_ticks_x = [0, 0.2, 0.4, 0.6, 0.8, 1]
-    major_ticks_y = [0.6, 0.7, 0.8, 0.9, 1.0]
-    ax1.set_xticks(major_ticks_x)
-    # ax1.set_yticks(major_ticks_y)
+    ax1.set_xlim([0, task_success_rate[-1]])
+    ax1.set_ylim([0, help_rate_bound[-1]])
+    # major_ticks_x = [0, 0.2, 0.4, 0.6, 0.8, 1]
+    # major_ticks_y = [0.6, 0.7, 0.8, 0.9, 1.0]
+    # ax1.set_xticks(major_ticks_x)
+    # # ax1.set_yticks(major_ticks_y)
     labels = [item.get_text() for item in ax1.get_xticklabels()]
     labels[0] = "0"
     labels[-1] = "1"
     ax1.set_xticklabels(labels)
     plt.axis('equal')
-    cbar, cax = add_colorbar(sc, aspect=20, pad_fraction=1.0)
-    cax.set_title(r'$\tau$=+1.0')
-    cax.set_xlabel(r'$\tau$=0.0')
+    cbar, cax = add_colorbar(sc, aspect=40, pad_fraction=0.25)
+    cax.set_title(rf'$|\hat \Phi|$={max(set_size)}')
+    cax.set_xlabel(r'$\|\hat \Phi|$=0')
     cbar.set_ticks([])
 
     plt.show()
@@ -272,19 +287,24 @@ def cross_entropy(a, b):
     return a * np.log(a/(b+0.001)+0.001) + (1-a) * np.log((1-a)/(1-b+0.001) + 0.001)
 
 def knowno_test_eval(N=500, eps_coverage=0.02, delta=0.01):
-    v = np.floor((N + 1)*eps_coverage)
-    a = N + 1 - v
-    b = v
-    return 1-beta.ppf(delta, a, b)
+    check_range = np.linspace(eps_coverage, eps_coverage/10, 10)
+    for e in check_range:
+        v = np.floor((N + 1)*e)
+        a = N + 1 - v
+        b = v
+        p_miscov = 1-beta.ppf(delta, a, b)
+        if p_miscov < eps_coverage:
+            return e
+    return None
 
+def get_knowno_epsilon_values(miscoverage_max=0.4, return_len=5):
 
-def get_knowno_epsilon_values():
-
-    knowno_coverage_range = np.arange(0.01, .25, 0.001)
+    knowno_coverage_range = np.arange(0.01, miscoverage_max, 0.001)
     indices = list(range(len(knowno_coverage_range)))
     test_eps_vals = [knowno_test_eval(eps_coverage=e) for e in knowno_coverage_range]
     test_eps = [(i, j, k) for (i,j,k) in zip(indices, knowno_coverage_range, test_eps_vals)]
-    return test_eps_vals
+    test_eps_vals = np.unique(test_eps_vals)
+    return knowno_coverage_range, test_eps_vals
 
 
 if __name__ == "__main__":

@@ -29,7 +29,7 @@ def save_model(my_model, use_habitat, use_vlm, epoch):
 def run_calibration(args, cal_loader, my_model, eval_policy, lambda_values, temperatures,
                     num_cal, traj_len, min_traj_len, num_intent,
                     use_habitat, use_vlm, epsilons, delta, alpha0s, alpha0s_simpleset, alpha1s, data_dict, logdir,
-                    epoch, calibration_thresholds=None, knowno_calibration_thresholds=None, test_cal=False):
+                    epoch, calibration_thresholds=None, knowno_calibration_thresholds=None, calibration_temps=None, test_cal=False):
 
 
     # Normal calibration
@@ -52,6 +52,7 @@ def run_calibration(args, cal_loader, my_model, eval_policy, lambda_values, temp
                                                         use_vlm=use_vlm,
                                                         calibration_thresholds=calibration_thresholds,
                                                         knowno_calibration_thresholds=knowno_calibration_thresholds,
+                                                        calibration_temps=calibration_temps,
                                                         test_cal=test_cal)
     for k, img in calibration_img.items():
         data_dict[k] = wandb.Image(img)
@@ -170,21 +171,33 @@ def make_obs_dict_hallway(obs, intent, intent_index):
     obs_dict = {"obs": obs[..., -1, index_start:index_end].cpu(), "mode": intent_onehot}
     return obs_dict
 
-def fixed_sequence_testing(lambdas, pvals, delta, index_set, temperatures):
+def fixed_sequence_testing(lambdas, pvals, delta, index_set, temperatures, bound_help=False):
     lambda_hat = []
     pvals_set = []
     union_bound_correction = len(index_set) * len(temperatures)
-    optimal_j = 0
     for k in index_set:
         j = k
         lam = lambdas[j]
-        if lam not in lambdas:
-            while pvals[j] <= delta/union_bound_correction:
+        loop_cond = pvals[j] <= delta / union_bound_correction
+        while loop_cond:
+            if lam not in lambda_hat:
                 lambda_hat.append(lam)
                 pvals_set.append(pvals[j])
-                optimal_j = j
-                if j < len(lambdas):
+                if j < len(lambdas)-1:
                     j = j + 1
+                    loop_cond = pvals[j] <= 0.5
+                else:
+                    loop_cond = False
+            else:
+                loop_cond = False
+    if len(lambda_hat) > 0:
+        optimal_j = list(lambdas).index(max(lambda_hat))
+    elif not bound_help:
+        optimal_j = 0
+        lambda_hat = [0]
+    else:
+        optimal_j = 0
+        lambda_hat = []
     return lambda_hat, pvals_set, optimal_j
 
 def entropy(x):
@@ -206,16 +219,16 @@ def construct_simple_set(x, eps=0.75):
     return prediction_set, visited
 
 def get_prediction_thresholds(seq_miscoverage_instance, seq_nonsingleton_instance, alpha1, alpha2, num_calibration,
-                              lambdas, temperatures, delta, index_set, prefer_coverage=False, knowno_default_temp=1):
-    pval_miscoverage = hoeffding_bentkus(seq_miscoverage_instance, alpha_val=alpha1, n=num_calibration)
-    pval_nonsingleton = hoeffding_bentkus(seq_nonsingleton_instance, alpha_val=alpha2, n=num_calibration)
+                              lambdas, temperatures, delta, index_set, prefer_coverage=False, knowno_default_temp=1, bound_help=False):
+    pval_miscoverage = hoeffding_bentkus(seq_miscoverage_instance, alpha_val=alpha1, n=500)
+    pval_nonsingleton = hoeffding_bentkus(seq_nonsingleton_instance, alpha_val=alpha2, n=500)
 
     combined_pval = np.array([max(p1, p2) for (p1, p2) in zip(pval_miscoverage, pval_nonsingleton)])
     lambda_hat_set, pvals_set, optimal_lambda_index = fixed_sequence_testing(lambdas, combined_pval, delta, index_set,
                                                                          temperatures)
     valid_ltt = len(lambda_hat_set) > 0
-    lambda_hat_set_miscoverage, _, _ = fixed_sequence_testing(lambdas, pval_miscoverage, delta, index_set, temperatures)
-    lambda_hat_set_nonsingleton, _, _ = fixed_sequence_testing(lambdas, pval_nonsingleton, delta, index_set, temperatures)
+    lambda_hat_set_miscoverage, _, _ = fixed_sequence_testing(lambdas, pval_miscoverage, delta, index_set, temperatures, bound_help)
+    lambda_hat_set_nonsingleton, _, _ = fixed_sequence_testing(lambdas, pval_nonsingleton, delta, index_set, temperatures, bound_help)
     if prefer_coverage:
         optimal_lambda = lambda_hat_set[0] if len(lambda_hat_set) > 0 else 0
     else:
@@ -231,9 +244,9 @@ def get_prediction_thresholds(seq_miscoverage_instance, seq_nonsingleton_instanc
 
 def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperatures, num_cal, traj_len=100, predict_step_interval=10,
                         num_intent=5, epsilons=0.15, alpha0s=0.15, alpha1s=0.15, alpha0s_simpleset=None, equal_action_mask_dist=1,
-                        use_habitat=False, use_vlm=False, test_cal=False, delta=0.05, entropy_tresh=1,
-                        calibration_thresholds=None, knowno_calibration_thresholds=None, i_knowno_temp=5,
-                        report_metrics=True, should_draw_heatmap=False, knowno_default_temp=1):
+                        use_habitat=False, use_vlm=False, test_cal=False, delta=0.05, entropy_thresh=1,
+                        calibration_thresholds=None, knowno_calibration_thresholds=None, calibration_temps=None, i_knowno_temp=0,
+                        report_metrics=True, should_draw_heatmap=True, knowno_default_temp=1, num_index=10):
 
     cnt = 0
     num_temperatures = len(temperatures)
@@ -244,6 +257,9 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
     # max_steps = traj_len // predict_step_interval
     if use_vlm:
         traj_len += 1
+    else:
+        traj_len -= predict_step_interval
+        entropy_thresh = 0.5
     traj_windows = torch.arange(predict_step_interval, traj_len, predict_step_interval)
     max_steps = len(traj_windows)
     non_conformity_score = -np.inf*torch.ones((num_temperatures, num_calibration, max_steps))
@@ -265,9 +281,15 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
     batch_start_ind = 0
     if model is not None:
         model.eval()
-    index_set = list(range(len(lambdas)))
+    if num_index > len(lambdas):
+        index_set = np.linspace(0, len(lambdas)//2, num_index)
+    else:
+        index_set = list(range(len(lambdas)))
+    index_set = [int(i) for i in index_set]
 
-    score_logit_thresh = 100
+    score_logit_thresh = 29.5
+    second_place_logit_thresh = 0.5
+    p_thresh = 1
 
     with torch.no_grad():
         for batch_dict in dataloader_tqdm:
@@ -311,7 +333,10 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                         input_human_pos = batch_pos[:, traj_start:endpoint]
                         y_pred, y_weight = model(input_t, input_human_pos, intent_points)
 
+                        y_weight = y_weight - y_weight.min(-1).values + 1
                         y_weight_temp = y_weight * temp
+                        # y_weight_temp = y_weight.clone()
+                        # y_weight_temp[:, y_weight.argmax(-1).item()] = temp * (y_weight )
                         y_weight_temp = y_weight_temp.softmax(dim=-1)
                         if use_habitat:
                             action_set = actions[:, t, :num_intent*2].reshape(1, -1, 2)
@@ -358,33 +383,40 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                         # score = score * temp
                         score[0:3] -= score[-1]/3
                         score[-1] = -np.inf
+                        score_logits = score
+                        top_label_logit = score_logits.max()
+                        second_place_logit = score_logits.topk(2).values[-1]
+                        true_label_logit = score_logits[label]
+                        is_within_thresh = torch.abs(top_label_logit - true_label_logit) < score_logit_thresh
+                        if top_label_logit != true_label_logit and is_within_thresh:
+                            # if torch.abs(top_label_logit - second_place_logit) < second_place_logit_thresh:
+                            #     label = score_logits.topk(2).indices[-1]
+                            # else:
+                            label = score_logits.argmax(-1)
+                            # replace the label in post processing
+                            # label = np.random.choice([score_logits.argmax().item(), score_logits.topk(2).indices[1].item()], p=[p_thresh, 1-p_thresh])
+                            # label = torch.Tensor([label]).cuda().int()
                         score = score * temp
                         # if score.sum() == 0:
                         #     score = torch.ones_like(score)
                         score = score.softmax(-1)
-                        score = torch.nan_to_num(score, 1)
+                        score = torch.nan_to_num(score, 1/(score.shape[-1]-1))
                         action_set_probs = score
                         true_label_smx = score[label]
-                        top_label = score.argmax(-1)
-                        top_label_smx = score.max()
-                        is_top2 = label == score.topk(2).indices[-1]
-                        is_within_thresh = torch.abs(top_label_smx - true_label_smx) < score_logit_thresh
-                        if top_label != label and is_within_thresh:
-                            # replace the label in post processing
-                            true_label_smx = top_label_smx
+
                         non_conformity_score[i, batch_start_ind:batch_end_ind, t] = (1 - true_label_smx).squeeze(-1)
                         # action_set_probs_list.append(score)
 
                     for i_lam, lam in enumerate(lambdas):
-                        pred_set = action_set_probs > lam
+                        pred_set = action_set_probs >= lam
                         prediction_set_size[i, batch_start_ind:batch_end_ind, t, i_lam] = pred_set.sum(-1)
                         nonsingleton_instance[i, batch_start_ind:batch_end_ind, t, i_lam] = pred_set.sum(-1) > 1
                         miscoverage_instance[i, batch_start_ind:batch_end_ind, t, i_lam] = (true_label_smx < lam).squeeze(-1)
 
                     for j, eps in enumerate(alpha0s_simpleset):
                         simple_pred_set, simple_indices = construct_simple_set(action_set_probs, eps)
-                        simple_prediction_set_size[i, batch_start_ind:batch_end_ind, t, j] = simple_pred_set.sum(-1)
-                        simple_nonsingleton_instance[i, batch_start_ind:batch_end_ind, t, j] = simple_pred_set.sum(-1) > 1
+                        simple_prediction_set_size[i, batch_start_ind:batch_end_ind, t, j] = simple_pred_set.shape[-1]
+                        simple_nonsingleton_instance[i, batch_start_ind:batch_end_ind, t, j] = simple_pred_set.shape[-1] > 1
                         simple_miscoverage_instance[i, batch_start_ind:batch_end_ind, t, j] = (label not in simple_indices)
 
                     nohelp_pred_set = action_set_probs.argmax(-1)
@@ -394,8 +426,8 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
 
                     entropy_pred_set = action_set_probs.argmax(-1)
                     entropy_prediction_set_size[i, batch_start_ind:batch_end_ind, t] = 1
-                    entropy_nonsingleton_instance[i, batch_start_ind:batch_end_ind, t] =  -entropy(action_set_probs) >= entropy_tresh
-                    entropy_miscoverage_instance[i, batch_start_ind:batch_end_ind, t] = (label != entropy_pred_set.item() and -entropy(action_set_probs) <= entropy_tresh)
+                    entropy_nonsingleton_instance[i, batch_start_ind:batch_end_ind, t] =  -entropy(action_set_probs) >= entropy_thresh
+                    entropy_miscoverage_instance[i, batch_start_ind:batch_end_ind, t] = (label != entropy_pred_set.item() and -entropy(action_set_probs) <= entropy_thresh)
 
 
             # save_processed_probs(dir, action_set_probs_list)
@@ -407,7 +439,8 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
     seq_prediction_set_size = prediction_set_size.max(2).values.mean(1)
     seq_nonsingleton_instance = nonsingleton_instance.max(2).values.mean(1)
     seq_non_conformity_score = non_conformity_score.max(2).values
-    seq_success_rate = 1 - seq_miscoverage_instance
+    seq_success_rate = 1 - miscoverage_instance.max(2).values + nonsingleton_instance.max(2).values
+    seq_success_rate = torch.clip(seq_success_rate, max=1).mean(1)
 
     simple_seq_miscoverage_instance = simple_miscoverage_instance.max(2).values.mean(1)
     simple_seq_prediction_set_size = simple_prediction_set_size.max(2).values.mean(1)
@@ -444,11 +477,11 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
     risk_metrics = {}
     imgs_ret = {}
 
-    no_help_agg_task_success_rate = np.zeros(num_epsilons)
+
 
     # Get the performance of the model on the calibration and test sets
     if report_metrics:
-
+        no_help_agg_task_success_rate = np.zeros(num_epsilons)
         agg_prediction_set_size = np.zeros(num_epsilons)
         agg_task_success_rate = np.zeros(num_epsilons)
         agg_help_rate = np.zeros(num_epsilons)
@@ -466,47 +499,49 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
         calibration_thresholds_new = np.zeros((num_temperatures, num_epsilons))
 
         for i in range(len(alpha0s)):
+            print(f"Processing: bound {i}.")
 
             if test_cal:
                 i_knowno = knowno_calibration_thresholds[i]  # Get KnowNo threshold
                 i_knowno = int(i_knowno)
-                knowno_agg_prediction_set_size[i] = seq_prediction_set_size_stage[i_knowno_temp, i_knowno].item()
-                knowno_agg_task_success_rate = 1-seq_miscoverage_instance_stage[i_knowno_temp, i_knowno].item()
-                knowno_agg_help_rate = seq_nonsingleton_instance_stage[i_knowno_temp, i_knowno].item()
-                simple_set_agg_prediction_set_size = simple_seq_prediction_set_size[i_knowno_temp, i].item()
-                simple_set_agg_task_success_rate = 1-simple_seq_miscoverage_instance[i_knowno_temp, i].item()
-                simple_set_agg_help_rate = simple_seq_nonsingleton_instance[i_knowno_temp, i].item()
+                knowno_agg_prediction_set_size[i] = seq_prediction_set_size[i_knowno_temp, i_knowno].item()
+                knowno_agg_task_success_rate[i] = 1-seq_miscoverage_instance[i_knowno_temp, i_knowno].item()
+                knowno_agg_help_rate[i] = seq_nonsingleton_instance[i_knowno_temp, i_knowno].item()
+                simple_set_agg_prediction_set_size[i] = simple_seq_prediction_set_size[i_knowno_temp, i].item()
+                simple_set_agg_task_success_rate[i] = 1-simple_seq_miscoverage_instance[i_knowno_temp, i].item()
+                simple_set_agg_help_rate[i] = simple_seq_nonsingleton_instance[i_knowno_temp, i].item()
                 entropy_set_agg_prediction_set_size = entropy_seq_prediction_set_size[i_knowno_temp].item()
                 entropy_set_agg_task_success_rate = 1-entropy_seq_miscoverage_instance[i_knowno_temp].item()
                 entropy_set_agg_help_rate = entropy_seq_nonsingleton_instance[i_knowno_temp].item()
+                no_help_agg_task_success_rate[i] = 1-nohelp_seq_miscoverage_instance[i_knowno_temp]
 
             optimal_help_temp = []
             optimal_miscoverage_temp = []
             optimal_pset_size = []
             parameter_set_size_list = []
-            eps_rcip_miscoverage_rate_best_temp = np.inf
+            eps_rcip_nonsingleton_rate_best_temp = np.inf
 
             for j in range(len(temperatures)):
                 temp = temperatures[j]
                 epsilon = epsilons[i]
                 alpha0 = alpha0s[i]
-                alpha1 = alpha1s[i]
 
+                num_calibration = 500
                 q_level = min(np.ceil((num_calibration + 1) * (1 - epsilon)) / num_calibration, 1)
                 qhat = 1-np.quantile(seq_non_conformity_score[j], q_level, method='higher')
-                i_knowno = np.abs((lambdas-qhat) * (lambdas-qhat) > 0).argmax() # find the closest lambda to knowno thresh, without going over
+                i_knowno = max(np.sum(qhat-lambdas > 0) - 2, 0) # find the closest lambda to knowno thresh, without going over
                 i_knowno = int(i_knowno)
 
                 # LTT versus knowno when coverage varies
                 sol = get_prediction_thresholds(seq_miscoverage_instance[j], seq_nonsingleton_instance[j], alpha0, 1, num_calibration,
-                                  lambdas, temperatures, delta, index_set, prefer_coverage=True)
+                                  lambdas, temperatures, delta, index_set, prefer_coverage=False)
                 lambda_hat_set, optimal_lambda, optimal_lambda_index, pvals, lambda_lb_nonsingleton, lambda_ub_miscoverage, valid_ltt = sol
                 combined_pval = pvals["combined_pval"]
                 pval_miscoverage = pvals["pval_miscoverage"]
                 pval_nonsingleton = pvals["pval_nonsingleton"]
-                calibration_thresholds_new[j, i] = optimal_lambda
+                calibration_thresholds_new[j, i] = optimal_lambda_index
                 if test_cal:
-                    optimal_lambda_index = calibration_thresholds[j][i] # Get RCIP threshold
+                    optimal_lambda_index = calibration_thresholds[i] # Get RCIP threshold
                     i_knowno = knowno_calibration_thresholds[i] # Get KnowNo threshold
                     optimal_lambda_index = int(optimal_lambda_index)
                     i_knowno = int(i_knowno)
@@ -535,11 +570,11 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                 optimal_pset_size.append((optimal_prediction_set_size, optimal_lambda))
                 parameter_set_size_list.append(len(lambda_hat_set))
 
-                if optimal_miscoverage_rate < eps_rcip_miscoverage_rate_best_temp:
+                if test_cal and j == calibration_temps[i]:
                     agg_prediction_set_size[i] = optimal_prediction_set_size
                     agg_task_success_rate[i] = 1 - optimal_miscoverage_rate
-                    agg_help_rate = optimal_nonsingleton_rate
-                    eps_rcip_miscoverage_rate_best_temp = optimal_miscoverage_rate
+                    agg_help_rate[i]  = optimal_nonsingleton_rate
+                    eps_rcip_nonsingleton_rate_best_temp = optimal_nonsingleton_rate
 
 
 
@@ -605,9 +640,11 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                 for k,v in risk_metrics_pre.items():
                     risk_metrics[f"{test_str}cal_risk_analysis_eps{alpha0}/temperature{temp}_" + k] = v
 
+                if j == i_knowno_temp:
+                    knowno_calibration_thresholds_new[i] = i_knowno
                 # # get images
-                if i == i_knowno_temp:
-                    knowno_calibration_thresholds_new[i] = qhat
+                if True:
+
                     img_miscoverage = plot_miscoverage_figure(lambdas, seq_miscoverage_instance[j], alpha=alpha0)
                     img_pred_set_size = plot_nonsingleton_figure(lambdas, seq_nonsingleton_instance[j], alpha=1)
                     img_nonconformity = plot_figures(seq_non_conformity_score[j], 1-qhat)
@@ -618,7 +655,7 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
 
                     for k,v in imgs.items():
                         eps_string = "%1.3f" %epsilon
-                        temp_string = "%1.1f" % temp
+                        temp_string = "%1.3f" % temp
                         pre_string = f"{test_str}cal_risk_imgs_eps{eps_string}_temperature{temp_string}/"
                         imgs_ret[pre_string + k] = v
 
@@ -626,7 +663,8 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
             parameter_set_sizes[i] = np.sum(parameter_set_size_list)
 
         risk_metrics["knowno_calibration_thresholds"] = list(knowno_calibration_thresholds_new)
-        risk_metrics["calibration_thresholds"] = list(calibration_thresholds_new)
+        risk_metrics["calibration_thresholds"] = list(calibration_thresholds_new.max(0))
+        risk_metrics["calibration_temps"] = list(calibration_thresholds_new.argmax(0))
 
         # Report the performance versus ablations as coverage bound varies
         if test_cal:
@@ -637,30 +675,40 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                 entropy_set_agg_prediction_set_size, entropy_set_agg_task_success_rate, entropy_set_agg_help_rate,
                 no_help_agg_task_success_rate
             )
-            imgs_ret[f"{test_str}cal_risk_imgs_figures/results"] = img_coverage
 
-    if should_draw_heatmap:
-        parameter_set_sizes = np.zeros(num_epsilons)
+            imgs_ret[f"{test_str}cal_risk_imgs_figures/results"] = img_coverage
+            import matplotlib.pyplot as plt
+            plt.imshow(img_coverage)
+            plt.show()
+    if should_draw_heatmap and not test_cal:
+        parameter_set_size_list = np.zeros(len(alpha0s) * len(alpha1s) // 4)
 
         eps_rcip_miscoverage_rate_best_temp = np.inf
 
         l = 0
+        alpha0s_heatmap = alpha0s[::2]
+        alpha1s_heatmap = alpha1s[::2]
 
-        for i in range(len(alpha1s)):
+        for i in range(len(alpha0s_heatmap)):
 
-            for k in range(len(alpha0s)):
+            print(f"Processing: help bound {i}.")
 
-                parameter_set_size_list = []
+            for k in range(len(alpha1s_heatmap)):
+
+                parameter_set_sizes = []
                 for j in range(len(temperatures)):
 
-                    alpha0 = alpha0s[k]
-                    alpha1 = alpha1s[i]
+                    alpha0 = alpha0s_heatmap[k]
+                    alpha1 = alpha1s_heatmap[i]
 
                     # LTT versus knowno when coverage varies
-                    sol = get_prediction_thresholds(seq_miscoverage_instance, seq_nonsingleton_instance, alpha0, alpha1,
-                                                    num_calibration,
+                    sol = get_prediction_thresholds(seq_miscoverage_instance[j], seq_nonsingleton_instance[j], alpha0,
+                                                    alpha1, num_calibration,
                                                     lambdas, temperatures, delta, index_set, prefer_coverage=False)
                     lambda_hat_set, optimal_lambda, optimal_lambda_index, pvals, lambda_lb_nonsingleton, lambda_ub_miscoverage, valid_ltt = sol
+                    combined_pval = pvals["combined_pval"]
+                    pval_miscoverage = pvals["pval_miscoverage"]
+                    pval_nonsingleton = pvals["pval_nonsingleton"]
 
                     # Sequence level: RCIP and Knowno
                     optimal_nonsingleton_rate = seq_nonsingleton_instance[j, optimal_lambda_index].item()
@@ -672,19 +720,23 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                     optimal_pset_size.append((optimal_prediction_set_size, optimal_lambda))
                     parameter_set_sizes.append(len(lambda_hat_set))
 
-                    if optimal_miscoverage_rate < eps_rcip_miscoverage_rate_best_temp:
-                        agg_prediction_set_size[i] = optimal_prediction_set_size
-                        agg_task_success_rate[i] = 1 - optimal_miscoverage_rate
-                        agg_help_rate[i] = 1 - optimal_nonsingleton_rate
+                    # if optimal_miscoverage_rate < eps_rcip_miscoverage_rate_best_temp:
+                    #     agg_prediction_set_size[i] = optimal_prediction_set_size
+                    #     agg_task_success_rate[i] = 1 - optimal_miscoverage_rate
+                    #     agg_help_rate[i] = 1 - optimal_nonsingleton_rate
 
                 # TODO: aggregate over temperatures to find the best of each score per temp (nonsingleton, pred set size, coverage)
-                parameter_set_sizes[l] = np.sum(parameter_set_size_list)
+                parameter_set_size_list[l] = np.sum(parameter_set_sizes * len(temperatures))
                 l += 1
 
         img_help = draw_heatmap(
-            alpha0s, alpha1s, parameter_set_sizes
+            alpha0s_heatmap, alpha1s_heatmap, parameter_set_size_list
         )
+
         imgs_ret[f"{test_str}cal_risk_imgs_figures/results"] = img_help
+        import matplotlib.pyplot as plt
+        plt.imshow(img_help)
+        # plt.show()
 
     return risk_metrics, imgs_ret
 

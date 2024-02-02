@@ -102,6 +102,7 @@ def draw_heatmap(alpha1s, alpha2s, parameter_set_sizes, xmax=1, ymax=0.15):
     zz = parameter_set_sizes
 
     # reshape and plot image
+    zz = np.array(zz)
     img = zz.reshape((xres, yres))
     ax = plt.gca()
     im = ax.imshow(img, cmap='viridis', extent=(0, xmax, 0, ymax), origin='lower', aspect='auto')
@@ -109,18 +110,19 @@ def draw_heatmap(alpha1s, alpha2s, parameter_set_sizes, xmax=1, ymax=0.15):
     plt.grid()
     ax = plt.gca()
     divider = make_axes_locatable(ax)
-    cbar, cax = add_colorbar(im, aspect=5)
+    cbar, cax = add_colorbar(im, aspect=20, pad_fraction=0.5)
     # forceAspect(ax,aspect=1)
 
     cax.set_ylabel(r"Size of Valid Parameter Set")
     plt.xlabel("Help Rate Bound")
     plt.ylabel("Miscoverage Rate Bound")
 
-
+    fig = plt.gcf()
+    img = get_img_from_fig(fig)
 
     # plt.title("Multiple 2D Gaussian Distributions Heatmap")
 
-    return ax
+    return img
 
 if __name__ == "__main__":
 
