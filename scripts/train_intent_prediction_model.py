@@ -221,8 +221,8 @@ def run():
     print(alpha0s.shape)
     epsilons = eps_knowno
     alpha0s = alpha0s
-    alpha0s_simpleset = np.linspace(.1, 1, len(eps_knowno))
-    alpha1s = np.linspace(0.4, 1.0, len(eps_knowno)) # np.arange(0.04, 1, 0.004)[:2]
+    alpha0s_simpleset = np.linspace(.01, 1, len(eps_knowno))
+    alpha1s = np.linspace(0, 1.0, len(eps_knowno)) # np.arange(0.04, 1, 0.004)[:2]
     temperatures = np.linspace(0, 0.7, num_temp)
     temperatures[0] = 1
     num_thresh = 200

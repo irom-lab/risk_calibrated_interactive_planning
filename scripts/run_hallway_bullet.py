@@ -43,19 +43,19 @@ def deploy_conformal_policy(env, model, episode_length=200, num_videos=3):
     for i in range(episode_length):
         action, _states = model.predict(obs, deterministic=True)
         obs, rewards, dones, info = env.step(action)
-        metrics = env.envs[0].get_metrics()
+        metrics = {} # env.envs[0].get_metrics()
         if metrics != {}:
             episode_metrics.append(metrics)
         total_reward += rewards
         if dones[0]:
             continue
 
-    episode_metrics = dict_collate(episode_metrics, compute_max=True) # ensure all metrics can be taken as max (e.g. cum. reward)
+    # episode_metrics = dict_collate(episode_metrics, compute_max=True) # ensure all metrics can be taken as max (e.g. cum. reward)
     return episode_metrics
 
 def run():
     parser = argparse.ArgumentParser(prog='BulletHallwayEnv')
-    parser.add_argument('--max-steps', type=int, default=100)
+    parser.add_argument('--max-steps', type=int, default=200)
     parser.add_argument('--network-hidden-dim', type=int, default=64)
     parser.add_argument('--n-epochs', type=int, default=10)
     parser.add_argument('--log-history', type=str2bool, default=False)
@@ -202,10 +202,10 @@ def run():
     best_mean_reward = -np.Inf
     total_metrics = []
     for iter in range(n_iters):
-        if not hide_intent:
-            metrics = deploy_conformal_policy(videnv, model, episode_length=max_steps)
-            total_metrics.append(metrics)
-        elif record_video_only:
+        # if not hide_intent:
+        #     metrics = deploy_conformal_policy(videnv, model, episode_length=max_steps)
+        #     total_metrics.append(metrics)
+        if record_video_only:
             record_video(videnv, model, video_length=video_length, num_videos=num_videos)
         else:
             if log_history:

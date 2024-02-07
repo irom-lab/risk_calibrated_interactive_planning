@@ -13,11 +13,11 @@ def record_video(videnv, model, video_length=200, num_videos=3, save_snapshots=T
         return
     snapshot_dir = '../hallway_snapshots/'
     print('Recording videos...')
-    for intent in range(num_videos):
+    for intent in [3]:
         if save_snapshots:
             snapshot_video_dir = os.path.join(snapshot_dir, f"video_{intent}")
             os.makedirs(snapshot_video_dir, exist_ok=True)
-        intent=np.random.choice(5)
+        # intent=np.random.choice(5)
         videnv.env.envs[0].seed_intent(HumanIntent(intent))
         obs = videnv.reset()
         total_reward = 0

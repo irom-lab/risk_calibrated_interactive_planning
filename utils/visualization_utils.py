@@ -91,6 +91,10 @@ def draw_heatmap(alpha1s, alpha2s, parameter_set_sizes, xmax=1, ymax=0.15):
     matplotlib.figure.Figure: A heatmap of the weighted Gaussian distributions.
     """
 
+    font = {
+            # 'weight': 'bold',
+            'size': 26}
+
     # create a grid of (x,y) coordinates at which to evaluate the kernels
     x = alpha1s
     y = alpha2s
@@ -113,8 +117,8 @@ def draw_heatmap(alpha1s, alpha2s, parameter_set_sizes, xmax=1, ymax=0.15):
     # forceAspect(ax,aspect=1)
 
     cax.set_ylabel(r"Size of Valid Parameter Set")
-    plt.xlabel("Help Rate Bound")
-    plt.ylabel("Miscoverage Rate Bound")
+    plt.xlabel("Miscoverage Rate Bound")
+    plt.ylabel("Help Rate Bound")
 
     fig = plt.gcf()
     img = get_img_from_fig(fig)
@@ -127,7 +131,7 @@ if __name__ == "__main__":
 
     font = {
             # 'weight': 'bold',
-            'size': 16}
+            'size': 26}
 
     matplotlib.rc('font', **font)
 

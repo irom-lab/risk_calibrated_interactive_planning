@@ -95,7 +95,7 @@ LETTER_CHOICES = ["A", "B", "C", "D"]
 
 PROMPT_DEBUG = "This is a set of four distinct images. What's in each image? List all objects you see."
 
-def get_mcqa(include_none=True, shuffle_options=True, single_letter=True, python_dict_probs=False):
+def get_mcqa(include_none=True, shuffle_options=True, single_letter=True, python_dict_probs=False, explain=False):
 
     mcqa = "Which bin should we place the object in?"
     num_options = len(OPTIONS)
@@ -113,6 +113,9 @@ def get_mcqa(include_none=True, shuffle_options=True, single_letter=True, python
 
     if single_letter:
         mcqa += ". Give your answer as a single letter: A, B, C, or D."
+
+    if explain:
+        mcqa += " Explain your reasoning."
 
     if python_dict_probs:
         mcqa += (f". Give your answer as a python dictionary with keys: {options_mcqa }. "
@@ -279,7 +282,7 @@ def generate_prediction_openai(prompt_vlm,
                                prompt_mcqa,
                                image_files,
                                indices,
-                               max_tokens=1,
+                               max_tokens=1000,
                                temperature_vlm=0,
                                temperature_llm=0,
                                seed=1234,
@@ -297,7 +300,8 @@ def generate_prediction_openai(prompt_vlm,
     if full_message is None or scores is None:
         space = " "
         full_prompt = space.join([prompt_llm, text_description, prompt_mcqa])
-        full_message, scores = vlm_or_llm(full_prompt, image_files, max_tokens=max_tokens,
+        language_tokens = 1
+        full_message, scores = vlm_or_llm(full_prompt, image_files, max_tokens=language_tokens,
                                           temperature=temperature_llm, seed=seed, is_vlm=False)
         scores = scores[indices]
         save_plan(image_files, full_message, scores, temperature_llm)
@@ -326,7 +330,7 @@ def vlm_or_llm(prompt,
             if is_vlm:
                 payload = make_payload_vlm(prompt=prompt, max_tokens=max_tokens, temperature=temperature, seed=seed, image_dr=image_files)
             else:
-                payload = make_payload_llm(prompt=prompt, max_tokens=1, temperature=temperature, seed=seed)
+                payload = make_payload_llm(prompt=prompt, max_tokens=max_tokens, temperature=temperature, seed=seed)
             response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
             parsed_response = parse_response(response, logprobs_avail=(not is_vlm))
             break

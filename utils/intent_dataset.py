@@ -54,6 +54,12 @@ class IntentPredictionDataset(Dataset):
             indices = indices_shuffled[train_set_size+calibration_set_size:train_set_size+calibration_set_size+max_in_set+safety_factor]
         else:
             indices = indices_shuffled[train_set_size:]
+            # if not use_habitat and not use_vlm:
+            #     indices = \
+            #         [3989, 1162, 11973, 16980, 7484, 10368, 2543, 5905, 4407, 5894, 15760, 9397, 16761, 17519, 10212, 7936,
+            #      1632, 11797, 2086, 2481, 4852, 16183, 6991, 17185, 14995, 13337, 10405, 15776, 7476, 13566, 828, 9542,
+            #      2602, 3222, 1444, 15867, 12090, 14340, 15634, 8471, 11155, 6492, 8873, 16603, 15749, 6903, 4874, 5133,
+            #      14669, 13083, 3595, 4807, 13460, 6134, 12429, 8506, 15927, 8409, 14633, 2751]
 
         subdirs = [subdirs[i] for i in indices]
         self.traj_dict = OrderedDict()

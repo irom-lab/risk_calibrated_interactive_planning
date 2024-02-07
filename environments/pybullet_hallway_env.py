@@ -28,8 +28,8 @@ RIGHT_BOUNDARY = 7
 UPPER_BOUNDARY = 4.5
 LOWER_BOUNDARY = -4.5
 
-RENDER_HEIGHT = 3200 # 720
-RENDER_WIDTH = 6400 # 960
+RENDER_HEIGHT = 800 # 720
+RENDER_WIDTH = 1600 # 960
 
 WALL_XLEN = 2
 WALL_YLEN = 1
@@ -377,7 +377,7 @@ class BulletHallwayEnv(gym.Env):
         return new_action
 
     def get_metrics(self):
-        return self.risk_evaluator.total_metrics
+        return None # self.risk_evaluator.total_metrics
 
 
     def compute_state_transition(self, action):

@@ -196,10 +196,10 @@ def plot_prediction_set_size_versus_success(prediction_set_size, task_success_ra
     ax2.plot(simple_set_help_rate, simple_set_task_success_rate, linewidth=5, label="Simple Set", c='C2')
     ax2.scatter(entropy_set_help_rate, entropy_set_task_success_rate, s=1000, marker="*", label="Entropy Set", color='m')
     ax2.scatter(np.zeros_like(no_help_task_success_rate), no_help_task_success_rate, s=1000, marker="*", label="No help", color='black')
-    ax2.set_ylabel('Plan Miscoverage Rate')
+    ax2.set_ylabel('Plan Success Rate')
     ax2.set_xlabel('Human Help Rate')
     ax2.set_xlim([-0.02, 1])
-    ax2.set_ylim([0.4, 1])
+    ax2.set_ylim([0.4, 1.02])
     # plt.axis('equal')
     # major_ticks_x = [0, 0.2, 0.4, 0.6, 0.8, 1]
     # major_ticks_y = [0.6, 0.7, 0.8, 0.9, 1.0]
@@ -297,7 +297,7 @@ def knowno_test_eval(N=500, eps_coverage=0.02, delta=0.01):
             return e
     return None
 
-def get_knowno_epsilon_values(miscoverage_max=0.4, return_len=5):
+def get_knowno_epsilon_values(miscoverage_max=0.45, return_len=5):
 
     knowno_coverage_range = np.arange(0.01, miscoverage_max, 0.001)
     indices = list(range(len(knowno_coverage_range)))
