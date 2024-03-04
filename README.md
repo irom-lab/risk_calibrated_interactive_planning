@@ -1,4 +1,4 @@
-# Risk Aware Planning 
+# Risk-Calibrated Interactive Planning 
 
 This repo contains the code for Risk-Calibrated Interactive Planning, an algorithm for training robots to interact with humans that have dynamic intent.
 
