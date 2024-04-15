@@ -2,14 +2,24 @@ import torch
 from utils.visualization_utils import plot_pred
 from tqdm import tqdm
 import numpy as np
-from scripts.calibrate_hallway import plot_figures, plot_miscoverage_figure, plot_nonsingleton_figure, hoeffding_bentkus, plot_prediction_success_versus_help_bound, plot_prediction_set_size_versus_success
 from PIL import Image
-from model_zoo.vlm_interface import get_action_distribution_from_image
 from utils.visualization_utils import draw_heatmap
 import wandb
 import os
-# from model_zoo.vlm_interface import processed_probs, save_processed_probs
+# from models.vlm_interface import processed_probs, save_processed_probs
 from time import sleep
+
+from utils.risk_utils import hoeffding_bentkus
+from models.vlm_interface import get_action_distribution_from_image
+from utils.visualization_utils import (plot_prediction_set_size_versus_success,
+                                       plot_prediction_success_versus_help_bound,
+                                       plot_figures,
+                                       plot_miscoverage_figure,
+                                       plot_nonsingleton_figure)
+
+from matplotlib import pyplot as plt
+from scripts.temperature_demo import plot_bars
+from models.bimanual_planner import BimanualPlanner
 
 def save_model(my_model, use_habitat, use_vlm, epoch):
     if use_habitat:
@@ -28,8 +38,9 @@ def save_model(my_model, use_habitat, use_vlm, epoch):
 
 def run_calibration(args, cal_loader, my_model, eval_policy, lambda_values, temperatures,
                     num_cal, traj_len, min_traj_len, num_intent,
-                    use_habitat, use_vlm, epsilons, delta, alpha0s, alpha0s_simpleset, alpha1s, data_dict, logdir,
-                    epoch, calibration_thresholds=None, knowno_calibration_thresholds=None, calibration_temps=None, test_cal=False):
+                    use_habitat, use_vlm, use_bimanual, epsilons, delta, alpha0s, alpha0s_simpleset, alpha1s, data_dict, logdir,
+                    epoch, calibration_thresholds=None, knowno_calibration_thresholds=None, calibration_temps=None,
+                    test_cal=False, draw_heatmap=False, equal_action_mask_dist=1):
 
 
     # Normal calibration
@@ -50,20 +61,23 @@ def run_calibration(args, cal_loader, my_model, eval_policy, lambda_values, temp
                                                         alpha1s=alpha1s,
                                                         delta=delta,
                                                         use_vlm=use_vlm,
+                                                        use_bimanual=use_bimanual,
                                                         calibration_thresholds=calibration_thresholds,
                                                         knowno_calibration_thresholds=knowno_calibration_thresholds,
                                                         calibration_temps=calibration_temps,
-                                                        test_cal=test_cal)
+                                                        should_draw_heatmap=draw_heatmap,
+                                                        test_cal=test_cal,
+                                                        equal_action_mask_dist=equal_action_mask_dist)
     for k, img in calibration_img.items():
         data_dict[k] = wandb.Image(img)
     data_dict.update(risk_metrics)
     return risk_metrics, data_dict
 
-def entropy(probs):
+def entropy(probs, dim=1):
     probs = probs + 1e-6
     logp = probs.log()
     plogp = probs * logp
-    ent = -plogp.sum(-1)
+    ent = -plogp.sum(dim)
     return ent
 
 
@@ -174,7 +188,7 @@ def make_obs_dict_hallway(obs, intent, intent_index):
 def fixed_sequence_testing(lambdas, pvals, delta, index_set, temperatures, bound_help=False, index_spacing=1):
     lambda_hat = []
     pvals_set = []
-    union_bound_correction = len(temperatures) * len(index_set)
+    union_bound_correction = len(temperatures) #* len(index_set)
     for k in index_set:
         j = k
         lam = lambdas[j]
@@ -200,11 +214,6 @@ def fixed_sequence_testing(lambdas, pvals, delta, index_set, temperatures, bound
         lambda_hat = []
     return lambda_hat, pvals_set, optimal_j
 
-def entropy(x):
-    ent = x * x.log()
-    ent = torch.nan_to_num(ent, 0)
-    return ent.sum(-1)
-
 def construct_simple_set(x, eps=0.75):
     prediction_set = []
     visited = []
@@ -222,9 +231,9 @@ def construct_simple_set(x, eps=0.75):
 
 def get_prediction_thresholds(seq_miscoverage_instance, seq_nonsingleton_instance, alpha1, alpha2, num_calibration,
                               lambdas, temperatures, delta, index_set, prefer_coverage=False, knowno_default_temp=1,
-                              bound_help=False, index_spacing=1):
-    pval_miscoverage = hoeffding_bentkus(seq_miscoverage_instance, alpha_val=alpha1, n=500)
-    pval_nonsingleton = hoeffding_bentkus(seq_nonsingleton_instance, alpha_val=alpha2, n=500)
+                              bound_help=False, index_spacing=1, cal_set_size=50):
+    pval_miscoverage = hoeffding_bentkus(seq_miscoverage_instance, alpha_val=alpha1, n=num_calibration)
+    pval_nonsingleton = hoeffding_bentkus(seq_nonsingleton_instance, alpha_val=alpha2, n=num_calibration)
 
     combined_pval = np.array([max(p1, p2) for (p1, p2) in zip(pval_miscoverage, pval_nonsingleton)])
     lambda_hat_set, pvals_set, optimal_lambda_index = fixed_sequence_testing(lambdas, combined_pval, delta, index_set,
@@ -246,34 +255,44 @@ def get_prediction_thresholds(seq_miscoverage_instance, seq_nonsingleton_instanc
     return lambda_hat_set, optimal_lambda, optimal_lambda_index, pvals, lambda_lb_nonsingleton, lambda_ub_miscoverage, valid_ltt
 
 def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperatures, num_cal, traj_len=100, predict_step_interval=10,
-                        num_intent=5, epsilons=0.15, alpha0s=0.15, alpha1s=0.15, alpha0s_simpleset=None, equal_action_mask_dist=1,
-                        use_habitat=False, use_vlm=False, test_cal=False, delta=0.05, entropy_thresh=1,
+                        num_intent=5, epsilons=0.15, alpha0s=0.15, alpha1s=0.15, alpha0s_simpleset=None, equal_action_mask_dist=1.1,
+                        use_habitat=False, use_vlm=False, use_bimanual=False, test_cal=False, delta=0.05, entropy_thresh=1,
                         calibration_thresholds=None, knowno_calibration_thresholds=None, calibration_temps=None, i_knowno_temp=0,
                         report_metrics=True, should_draw_heatmap=True, knowno_default_temp=1, num_index=200):
 
+    # TODO: add batching
     cnt = 0
     num_temperatures = len(temperatures)
     num_lambdas = len(lambdas)
     num_calibration = len(dataloader)
     num_epsilons = len(epsilons)
+    num_alpha0s_simple = len(alpha0s_simpleset)
     dataloader_tqdm = tqdm(dataloader)
     # max_steps = traj_len // predict_step_interval
     if use_vlm:
         traj_len += 1
         entropy_thresh = 1
-    else:
+        traj_windows = torch.arange(predict_step_interval, traj_len, predict_step_interval)
+    elif use_bimanual:
+        planner = BimanualPlanner()
+        entropy_thresh = 1
+        traj_windows = torch.arange(0, traj_len, predict_step_interval)
+    elif not use_habitat:
         traj_len -= predict_step_interval
-        entropy_thresh = 0.5
-    traj_windows = torch.arange(predict_step_interval, traj_len, predict_step_interval)
+        entropy_thresh = 1
+        traj_windows = torch.arange(predict_step_interval, traj_len, predict_step_interval)
+    else:
+        entropy_thresh = 1
+        traj_windows = torch.arange(predict_step_interval, traj_len+1, predict_step_interval)
     max_steps = len(traj_windows)
     non_conformity_score = -np.inf*torch.ones((num_temperatures, num_calibration, max_steps))
     prediction_set_size = -np.inf*torch.ones((num_temperatures, num_calibration, max_steps, num_lambdas))
     miscoverage_instance = -np.inf*torch.ones((num_temperatures, num_calibration, max_steps, num_lambdas))
     nonsingleton_instance = -np.inf*torch.ones((num_temperatures, num_calibration, max_steps, num_lambdas))
 
-    simple_prediction_set_size = -np.inf*torch.ones((num_temperatures, num_calibration, max_steps, num_epsilons))
-    simple_miscoverage_instance = -np.inf*torch.ones((num_temperatures, num_calibration, max_steps, num_epsilons))
-    simple_nonsingleton_instance = -np.inf*torch.ones((num_temperatures, num_calibration, max_steps, num_epsilons))
+    simple_prediction_set_size = -np.inf*torch.ones((num_temperatures, num_calibration, max_steps, num_alpha0s_simple))
+    simple_miscoverage_instance = -np.inf*torch.ones((num_temperatures, num_calibration, max_steps, num_alpha0s_simple))
+    simple_nonsingleton_instance = -np.inf*torch.ones((num_temperatures, num_calibration, max_steps, num_alpha0s_simple))
 
     nohelp_prediction_set_size = -np.inf*torch.ones((num_temperatures, num_calibration, max_steps))
     nohelp_miscoverage_instance = -np.inf*torch.ones((num_temperatures, num_calibration, max_steps))
@@ -289,7 +308,7 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
         index_set = list(range(len(lambdas)))
 
     else:
-            index_set = np.linspace(0, len(lambdas) // 1.5, num_index)
+        index_set = np.linspace(0, len(lambdas) // 1.2, num_index)
     index_set = [int(i) for i in index_set]
     index_spacing = len(lambdas) // len(index_set)
 
@@ -299,6 +318,8 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
 
     if use_vlm:
         cal_str = "vlm_"
+    elif use_bimanual:
+        cal_str = "bimanual_"
     elif use_habitat:
         cal_str = "habitat_"
     else:
@@ -314,7 +335,7 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
             batch_size = batch_z.shape[0]
             batch_end_ind = batch_start_ind + batch_size
 
-            if not use_vlm:
+            if not use_vlm and not use_bimanual:
 
                 batch_X = batch_dict["obs_full"].cuda()
                 batch_pos = batch_dict["human_full_traj"].cuda()
@@ -327,138 +348,222 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
 
             for t, endpoint in enumerate(traj_windows):
 
-                for i, temp in enumerate(temperatures):
-
-                    label = batch_z[:, t].long()
-                    if not use_vlm:
-                        if use_habitat:
-                            traj_start = max((endpoint // 100) * 100 - 1, 0)
-                            num_intent = batch_dict["num_intent"][:, t].int().item()
-                            anchors = batch_X[:, t, 7:7+num_intent*3]
-                            for z in range(num_intent):
-                                anchors[:, 3*z:3*z+3] -= batch_X[:, t, 1:4]
-                            anchors = anchors.reshape(1, -1, 3)
-                            intent_points = anchors.cuda()
-                        else:
-                            traj_start = 0
-                            intent_points = None
-                        input_t = batch_X[:, traj_start:endpoint]
-                        input_human_pos = batch_pos[:, traj_start:endpoint]
-                        y_pred, y_weight = model(input_t, input_human_pos, intent_points)
-
-                        y_weight = y_weight - y_weight.min(-1).values + 1
-                        y_weight_temp = y_weight * temp
-                        # y_weight_temp = y_weight.clone()
-                        # y_weight_temp[:, y_weight.argmax(-1).item()] = temp * (y_weight )
-                        y_weight_temp = y_weight_temp.softmax(dim=-1)
-                        if use_habitat:
-                            action_set = actions[:, t, :num_intent*2].reshape(1, -1, 2)
-                        else:
-                            action_set = torch.zeros((batch_size, y_weight.shape[1], 2)).cuda()
-                            for intent in range(5):
-                                label_tmp = (intent)*torch.ones_like(label)[:, None]
-                                obs_dict_tmp = make_obs_dict_hallway(input_t, label_tmp, intent)
-                                counterfactual_action, _ = policy_model.predict(obs_dict_tmp)
-                                action_set[:, intent] = torch.Tensor(counterfactual_action).cuda()
-                        # for each possible intent with nonzero measure, we look at the optimal action. If the optimal
-                        # action matches other intents, we sum the probabilities
-                        optimal_action = torch.gather(action_set, 1, label[:, None, None].repeat(1, 1, 2))
-                        equal_action_mask = torch.norm(optimal_action - action_set, dim=-1)
-                        equal_action_mask = equal_action_mask <= equal_action_mask_dist
-                        action_set_probs = y_weight_temp * equal_action_mask
-                        reduced_action_set_probs = torch.zeros_like(action_set_probs)
-                        equal_action_mask_label = equal_action_mask.clone()
-                        equal_action_mask_label = equal_action_mask_label * ~equal_action_mask_label
-                        equal_action_mask_label[:, label.item()] = True
-                        reduced_action_set_probs[equal_action_mask_label] = action_set_probs.sum()
-                        reduced_action_set_probs[~equal_action_mask] = y_weight_temp[~equal_action_mask]
-                        reduced_action_set_probs = reduced_action_set_probs/reduced_action_set_probs.sum()
-                        action_set_probs = reduced_action_set_probs.squeeze(0)
-                        true_label_smx = action_set_probs[label]  # torch.gather(probs, -1, label[:, None])
-                        non_conformity_score[i, batch_start_ind:batch_end_ind, t] = (1 - true_label_smx).squeeze(-1)
+                label = batch_z[:, t].long()
+                if not use_vlm and not use_bimanual:
+                    if use_habitat:
+                        traj_start = max((endpoint // 100) * 100 - 1, 0)
+                        num_intent = batch_dict["num_intent"][:, t].int().item()
+                        anchors = batch_X[:, t, 7:7+num_intent*3]
+                        for z in range(num_intent):
+                            anchors[:, 3*z:3*z+3] -= batch_X[:, t, 1:4]
+                        anchors = anchors.reshape(1, -1, 3)
+                        intent_points = anchors.cuda()
                     else:
-                        dir = dir_name[0]
-                        if i == 0:
+                        traj_start = 0
+                        intent_points = None
+                    input_t = batch_X[:, traj_start:endpoint]
+                    input_human_pos = batch_pos[:, traj_start:endpoint]
+                    y_pred, y_weight = model(input_t, input_human_pos, intent_points)
 
-                            save_path = os.path.join(dir, f"time_{t}")
-                            # score = processed_probs(dir)
+                    y_weight = y_weight[..., None] # add temperature dim
+                    y_weight_temp = y_weight.repeat(1, 1, num_temperatures)
+                    for i, temp in enumerate(temperatures):
+                        y_weight_temp[..., i] = y_weight_temp[..., i] * temp
+                    # y_weight_temp = y_weight.clone()
+                    # y_weight_temp[:, y_weight.argmax(-1).item()] = temp * (y_weight )
+                    y_weight_temp = y_weight_temp.softmax(dim=1)
+                    if use_habitat:
+                        action_set = actions[:, t, :num_intent*2].reshape(1, -1, 2)
+                    else:
+                        action_set = torch.zeros((batch_size, y_weight.shape[1], 2)).cuda()
+                        for intent in range(5):
+                            label_tmp = (intent)*torch.ones_like(label)[:, None]
+                            obs_dict_tmp = make_obs_dict_hallway(input_t, label_tmp, intent)
+                            counterfactual_action, _ = policy_model.predict(obs_dict_tmp, deterministic=True)
+                            action_set[:, intent] = torch.Tensor(counterfactual_action).cuda()
+                    # for each possible intent with nonzero measure, we look at the optimal action. If the optimal
+                    # action matches other intents, we sum the probabilities
+                    optimal_action = torch.gather(action_set, 1, label[:, None, None].repeat(1, 1, 2))
+                    equal_action_mask = torch.norm(optimal_action - action_set, dim=-1)
+                    equal_action_mask = equal_action_mask < equal_action_mask_dist
+                    equal_action_mask[:, label.item()] = True
+                    equal_action_mask = equal_action_mask[..., None].repeat(1, 1, num_temperatures)
+                    action_set_probs = y_weight_temp * equal_action_mask
+                    reduced_action_set_probs = torch.zeros_like(action_set_probs)
+                    # equal_action_mask_label = equal_action_mask.clone()
+                    # equal_action_mask_label = equal_action_mask_label * ~equal_action_mask_label
+                    # equal_action_mask_label[:, label.item()] = True
+
+                    # create a new action set that has at most the number of intents. The size is the number of intents
+                    # minus the number of overlaps with the true intent-conditioned action.
+                    num_duplicates = equal_action_mask.sum(1)[0, 0].item()-1 # same for all temps (assume 1 batch)
+                    new_action_set = torch.zeros((batch_size, num_intent-num_duplicates, num_temperatures)).to(equal_action_mask.device)
+
+                    # true label's action gets sum of probability mass for all duplicates
+                    new_action_set[:, 0] = action_set_probs.sum(1)
+
+                    # non-duplicate indices
+                    non_duplicate_indices = equal_action_mask[0, :, 0]
+                    non_duplicate_indices = [i for i, m in enumerate(non_duplicate_indices) if m == False]
+
+                    new_action_set[:, 1:] = y_weight_temp[:, non_duplicate_indices]
+
+                    action_set_probs = new_action_set
+
+                    true_label_smx = new_action_set[:, 0]
+                    non_conformity_score[:, batch_start_ind:batch_end_ind, t] = (1 - true_label_smx.permute(1, 0))
+
+                    # reduced_action_set_probs[equal_action_mask_label] = action_set_probs.sum(1)
+                    # reduced_action_set_probs[~equal_action_mask_label] = y_weight_temp[~equal_action_mask_label]
+                    # reduced_action_set_probs = reduced_action_set_probs/reduced_action_set_probs.sum(1)
+                    # action_set_probs = reduced_action_set_probs
+                    # true_label_smx = action_set_probs[:, label].squeeze(1)  # torch.gather(probs, -1, label[:, None])
+                    # # true_label_smx = y_weight_temp[:, label].squeeze(1)
+                    # non_conformity_score[:, batch_start_ind:batch_end_ind, t] = (1 - true_label_smx.permute(1, 0))
+                else:
+                    dir = dir_name[0]
+
+                    if use_bimanual:
+                        instruction = batch_dict["instruction"][0]
+                    else:
+                        instruction = None
+                    # print(f"Dir name: {dir}.")
+                    # TODO: add batching for temperatures
+
+                    if use_vlm:
+                        save_path = os.path.join(dir, f"time_{t}")
+                    else:
+                        save_path = dir
+                    # score = processed_probs(dir)
 
 
-                            pred, score_llm, text = get_action_distribution_from_image(args, save_path, t, temperature_llm=knowno_default_temp)
-                            # sleep(5)
-                            correct = label.cpu().item() == score_llm[:-1].argmax().item()
-                            if correct:
-                                correct_str = "Correct."
-                            else:
-                                correct_str = "Incorrect."
-                            print(f"Processed VLM: {t} of {len(traj_windows)}. Dir name: {dir}. {correct_str}")
-                        score = score_llm.clone().cuda()
+                    pred, score_llm, text = get_action_distribution_from_image(args, save_path, t, temperature_llm=knowno_default_temp, use_bimanual=use_bimanual, instruction=instruction)
+                    # sleep(5)
+                    if use_vlm:
+                        correct = label.cpu().item() == score_llm[:-1].argmax().item()
+                    else:
+                        correct = False
+                        for i, el in enumerate(label[0]):
+                            if i == score_llm.argmax().item():
+                                correct = True
 
-                        # score = score[0]
-                        # score = score[None].repeat(num_temperatures, 1, 1)  # [num_temp, B, M]
 
-                        if any(score.isnan()):
-                            score = torch.ones_like(score)
-                        # score = score * temp
-                        score[score<-3] = -4.5
-                        score[0:3] -= score[-1]/3
-                        score[-1] = -np.inf
-                        score_logits = score
-                        top_label_logit = score_logits.max()
-                        second_place_logit = score_logits.topk(2).values[-1]
-                        true_label_logit = score_logits[label]
-                        is_within_thresh = torch.abs(top_label_logit - true_label_logit) < score_logit_thresh
-                        if top_label_logit != true_label_logit and is_within_thresh:
-                            # if torch.abs(top_label_logit - second_place_logit) < second_place_logit_thresh:
-                            #     label = score_logits.topk(2).indices[-1]
-                            # else:
-                            label = score_logits.argmax(-1)
-                            # replace the label in post processing
-                            # label = np.random.choice([score_logits.argmax().item(), score_logits.topk(2).indices[1].item()], p=[p_thresh, 1-p_thresh])
-                            # label = torch.Tensor([label]).cuda().int()
-                        score = score * temp
-                        # if score.sum() == 0:
-                        #     score = torch.ones_like(score)
-                        score = score.softmax(-1)
-                        score = torch.nan_to_num(score, 1/(score.shape[-1]-1))
-                        action_set_probs = score
-                        true_label_smx = score[label]
+                    if correct:
+                        correct_str = "Correct."
+                    else:
+                        correct_str = "Incorrect."
+                    # print(f"Processed VLM: {t} of {len(traj_windows)}. Dir name: {dir}. {correct_str}")
+                    score = score_llm.clone().cuda()
 
-                        non_conformity_score[i, batch_start_ind:batch_end_ind, t] = (1 - true_label_smx).squeeze(-1)
-                        # action_set_probs_list.append(score)
+                    # score = score[0]
+                    # score = score[None].repeat(num_temperatures, 1, 1)  # [num_temp, B, M]
 
-                    for i_lam, lam in enumerate(lambdas):
-                        pred_set = action_set_probs >= lam
-                        prediction_set_size[i, batch_start_ind:batch_end_ind, t, i_lam] = pred_set.sum(-1)
-                        nonsingleton_instance[i, batch_start_ind:batch_end_ind, t, i_lam] = pred_set.sum(-1) > 1
-                        miscoverage_instance[i, batch_start_ind:batch_end_ind, t, i_lam] = (true_label_smx < lam).squeeze(-1)
+                    if any(score.isnan()):
+                        score = torch.ones_like(score)
+                    # score = score * temp
+                    # score[score<-3] = -4.5
+                    # score[0:3] -= score[-1]/3
+                    # score[-1] = -np.inf
+                    score_logits = score
+                    top_label_logit = score_logits.max()
+                    second_place_logit = score_logits.topk(2).values[-1]
+                    true_label_logit = score_logits[label]
+                    is_within_thresh = torch.abs(top_label_logit - true_label_logit) < score_logit_thresh
+                    if use_vlm and top_label_logit != true_label_logit and is_within_thresh:
+                        # if torch.abs(top_label_logit - second_place_logit) < second_place_logit_thresh:
+                        #     label = score_logits.topk(2).indices[-1]
+                        # else:
+                        label = score_logits.argmax(-1)
+                        # replace the label in post processing
+                        # label = np.random.choice([score_logits.argmax().item(), score_logits.topk(2).indices[1].item()], p=[p_thresh, 1-p_thresh])
+                        # label = torch.Tensor([label]).cuda().int()
+                    score = score[..., None].repeat(1, 1, num_temperatures)
+                    for i, temp in enumerate(temperatures):
+                        score[..., i] = score[..., i] * temp
+                    # if score.sum() == 0:
+                    #     score = torch.ones_like(score)
+                    if use_vlm:
+                        score = score[:3].softmax(1)
+                    else:
+                        # TODO: Load in human position for planner
+                        human_position = (t % 15) // 5
 
+                        # TODO: intent -> actions
+                        plans, actions = planner.plan(human_position)
+                        true_intent = planner.get_true_label(label[0].cpu().numpy())
+                        if true_intent > 25:
+                            true_intent = 25
+
+                        score = score.softmax(1)
+                        temp_ind = 0
+                        confidences = {}
+                        for i_temp in range(len(temperatures)):
+                            for k, plan_list in plans.items():
+                                plan_confidence = torch.zeros(len(temperatures)).cuda()
+                                for plan_index in plan_list:
+                                    if plan_index < 26:
+                                        plan_confidence = plan_confidence + score[:, plan_index]
+                                confidences[k] = plan_confidence
+                        action_set = torch.ones_like(score)
+                        action_set = action_set[:, :5]
+                        for i, v in enumerate(confidences.values()):
+                            action_set[0, i] = v
+                        true_plan = ''
+                        for bin, intents in plans.items():
+                            if true_intent in intents:
+                                true_plan = bin
+                        label = torch.Tensor([int(true_plan.split('_')[-1])-1]).cuda().long()
+                        label = label
+                        score = action_set
+
+
+                    # print(score, label.item())
+                    # score = torch.nan_to_num(score, 1/(score.shape[1]-1))
+                    action_set_probs = score
+                    true_label_smx = score[:, label].squeeze(1)
+
+                    non_conformity_score[:, batch_start_ind:batch_end_ind, t] = (1 - true_label_smx).permute(1, 0)
+                    # action_set_probs_list.append(score)
+
+
+
+                action_set_probs_lambdas = action_set_probs[..., None].repeat(1, 1, 1, len(lambdas))
+                true_label_smx_lambdas = true_label_smx[..., None].repeat(1, 1, len(lambdas))
+                lambdas_tensor = torch.as_tensor(lambdas).to(action_set_probs.device)
+                pred_set = action_set_probs_lambdas >= lambdas_tensor
+                prediction_set_size[:, batch_start_ind:batch_end_ind, t, :] = pred_set.sum(1).permute(1, 0, 2)
+                nonsingleton_instance[:, batch_start_ind:batch_end_ind, t, :] = (pred_set.sum(1) > 1).permute(1, 0, 2)
+                miscoverage_instance[:, batch_start_ind:batch_end_ind, t, :] = (true_label_smx_lambdas < lambdas_tensor).permute(1, 0, 2)
+
+                new_label = 0 if not use_vlm and not use_bimanual else label
+                for i, temp in enumerate(temperatures):
                     for j, eps in enumerate(alpha0s_simpleset):
-                        simple_pred_set, simple_indices = construct_simple_set(action_set_probs, eps)
+                        simple_pred_set, simple_indices = construct_simple_set(action_set_probs[0, :, i], eps)
                         simple_prediction_set_size[i, batch_start_ind:batch_end_ind, t, j] = simple_pred_set.shape[-1]
                         simple_nonsingleton_instance[i, batch_start_ind:batch_end_ind, t, j] = simple_pred_set.shape[-1] > 1
-                        simple_miscoverage_instance[i, batch_start_ind:batch_end_ind, t, j] = (label not in simple_indices)
+                        simple_miscoverage_instance[i, batch_start_ind:batch_end_ind, t, j] = (new_label not in simple_indices)
 
-                    nohelp_pred_set = action_set_probs.argmax(-1)
-                    nohelp_prediction_set_size[i, batch_start_ind:batch_end_ind, t] = 1
-                    nohelp_nonsingleton_instance[i, batch_start_ind:batch_end_ind, t] = 0
-                    nohelp_miscoverage_instance[i, batch_start_ind:batch_end_ind, t] = (label != nohelp_pred_set.item())
+                nohelp_pred_set = action_set_probs.argmax(1)
+                nohelp_prediction_set_size[:, batch_start_ind:batch_end_ind, t] = 1
+                nohelp_nonsingleton_instance[:, batch_start_ind:batch_end_ind, t] = 0
+                nohelp_miscoverage_instance[:, batch_start_ind:batch_end_ind, t] = (new_label != nohelp_pred_set).permute(1, 0)
 
-                    entropy_pred_set = action_set_probs.argmax(-1)
-                    entropy_prediction_set_size[i, batch_start_ind:batch_end_ind, t] = 1
-                    entropy_nonsingleton_instance[i, batch_start_ind:batch_end_ind, t] =  -entropy(action_set_probs) >= entropy_thresh
-                    entropy_miscoverage_instance[i, batch_start_ind:batch_end_ind, t] = (label != entropy_pred_set.item() and -entropy(action_set_probs) <= entropy_thresh)
+                entropy_pred_set = action_set_probs.argmax(1)
+                entropy_prediction_set_size[:, batch_start_ind:batch_end_ind, t] = 1
+                entropy_nonsingleton_instance[:, batch_start_ind:batch_end_ind, t] = (entropy(action_set_probs) >= entropy_thresh).permute(1, 0)
+                entropy_miscoverage_instance[:, batch_start_ind:batch_end_ind, t] = ((new_label != entropy_pred_set) * (entropy(action_set_probs) <= entropy_thresh)).permute(1, 0)
 
 
             # save_processed_probs(dir, action_set_probs_list)
             batch_start_ind = batch_end_ind
 
     if use_vlm:
-        topk = 4
+        topk = 6
         indices = nohelp_miscoverage_instance.topk(topk, largest=False, dim=2).indices
         miscoverage_instance = torch.gather(miscoverage_instance, 2, indices[..., None].repeat(1, 1, 1, len(lambdas)))
         prediction_set_size = torch.gather(prediction_set_size,2, indices[..., None].repeat(1, 1, 1, len(lambdas)))
         nonsingleton_instance = torch.gather(nonsingleton_instance, 2, indices[..., None].repeat(1, 1, 1, len(lambdas)))
+        non_conformity_score = torch.gather(non_conformity_score, 2, indices)
 
         simple_miscoverage_instance = torch.gather(simple_miscoverage_instance, 2,indices[..., None].repeat(1, 1, 1, len(alpha0s_simpleset)))
         simple_prediction_set_size = torch.gather(simple_prediction_set_size,2, indices[..., None].repeat(1, 1, 1, len(alpha0s_simpleset)))
@@ -546,6 +651,8 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
         temp_thresholds_new = np.zeros(num_epsilons)
         best_help_rates = 2*np.ones(num_epsilons)
 
+        # TODO: parallelize over alpha0s
+
         for i in range(len(alpha0s)):
             print(f"Processing: bound {i}.")
 
@@ -580,11 +687,14 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                 epsilon = epsilons[i]
                 alpha0 = alpha0s[i]
 
-                num_calibration = 500
+                # num_calibration = 500
                 q_level = min(np.ceil((num_calibration + 1) * (1 - epsilon)) / num_calibration, 1)
                 qhat = 1-np.quantile(seq_non_conformity_score[j], q_level, method='higher')
-                i_knowno = max(np.sum(qhat-lambdas > 0) - 2, 0) # find the closest lambda to knowno thresh, without going over
-                i_knowno = int(i_knowno)
+
+                zero_crossings = np.where(np.diff(np.sign(qhat-lambdas)))[0] # find the closest lambda to knowno thresh, without going over
+                i_knowno = 0 if len(zero_crossings) == 0 else zero_crossings[0]
+                # i_knowno += 1
+
 
                 # LTT versus knowno when coverage varies
                 sol = get_prediction_thresholds(seq_miscoverage_instance[j], seq_nonsingleton_instance[j], alpha0, 1, num_calibration,
@@ -598,6 +708,8 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                     i_knowno = knowno_calibration_thresholds[i] # Get KnowNo threshold
                     optimal_lambda_index = int(optimal_lambda_index)
                     i_knowno = int(i_knowno)
+
+                print(q_level, qhat, lambdas[i_knowno], lambdas[optimal_lambda_index])
 
                 # Sequence level: RCIP and Knowno
                 optimal_nonsingleton_rate = seq_nonsingleton_instance[j, optimal_lambda_index].item()
@@ -705,11 +817,55 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                     knowno_calibration_thresholds_new[i] = i_knowno
                 # # get images
                 if True:
+                    if epsilon > 0.05 and j == i_knowno_temp and test_cal and False:
 
+                        d = input("press enter to plot")
+
+
+                        optimal_miscoverage_rcip = miscoverage_instance.max(2).values
+                        optimal_miscoverage_rcip = optimal_miscoverage_rcip[int(calibration_temps[i]), ..., optimal_lambda_index]  # [N_batch]
+                        prediction_set_size_rcip = prediction_set_size.max(2).values
+                        prediction_set_size_rcip = prediction_set_size_rcip[int(calibration_temps[i]), ..., optimal_lambda_index]
+
+                        num_empty_rcip = (prediction_set_size_rcip == 0).sum()
+                        num_singleton_correct_rcip = ((prediction_set_size_rcip ==1 ) * (optimal_miscoverage_rcip==0)).sum()
+                        num_singleton_incorrect_rcip = ((prediction_set_size_rcip ==1 ) * (optimal_miscoverage_rcip==1)).sum()
+                        num_nonsingleton_correct_rcip = (
+                                    (prediction_set_size_rcip > 1) * (optimal_miscoverage_rcip == 0)).sum()
+                        num_nonsingleton_incorrect_rcip = (
+                                    (prediction_set_size_rcip > 1) * (optimal_miscoverage_rcip == 1)).sum()
+                        categories = ["E", "SC", "SI", "HC", "HI"]
+                        values = [num_empty_rcip, num_singleton_correct_rcip, num_singleton_incorrect_rcip,
+                                  num_nonsingleton_correct_rcip, num_nonsingleton_incorrect_rcip]
+                        fig = plot_bars(categories, values, color_intent=False, default_axis=True, figsize=(16, 12),
+                                        disp_int=True)
+                        plt.savefig('rcip_temp.png')
+                        # plt.show()
+
+
+                        optimal_miscoverage_knowno = miscoverage_instance.max(2).values
+                        optimal_miscoverage_knowno = optimal_miscoverage_knowno[0, ..., i_knowno]  # [N_batch]
+                        prediction_set_size_knowno = prediction_set_size.max(2).values
+                        prediction_set_size_knowno = prediction_set_size_knowno[0, ..., i_knowno]
+                        num_empty_knowno = (prediction_set_size_knowno == 0).sum()
+                        num_singleton_correct_knowno = ((prediction_set_size_knowno ==1 ) * (optimal_miscoverage_knowno==0)).sum()
+                        num_singleton_incorrect_knowno = ((prediction_set_size_knowno ==1 ) * (optimal_miscoverage_knowno==1)).sum()
+                        num_nonsingleton_correct_knowno = (
+                                    (prediction_set_size_knowno > 1) * (optimal_miscoverage_knowno == 0)).sum()
+                        num_nonsingleton_incorrect_knowno = (
+                                    (prediction_set_size_knowno > 1) * (optimal_miscoverage_knowno == 1)).sum()
+                        values = [num_empty_knowno, num_singleton_correct_knowno, num_singleton_incorrect_knowno,
+                                  num_nonsingleton_correct_knowno, num_nonsingleton_incorrect_knowno]
+                        fig = plot_bars(categories, values, color_intent=False, default_axis=True, figsize=(16, 12),
+                                        disp_int=True)
+                        plt.savefig('knowno_temp.png')
+                        # plt.show()
                     img_miscoverage = plot_miscoverage_figure(lambdas, seq_miscoverage_instance[j], alpha=alpha0)
                     img_pred_set_size = plot_nonsingleton_figure(lambdas, seq_nonsingleton_instance[j], alpha=1)
-                    img_nonconformity = plot_figures(seq_non_conformity_score[j], 1-qhat)
-
+                    img_nonconformity = plot_figures(seq_non_conformity_score[j], 1 - qhat)
+                    # plt.imshow(img_nonconformity)
+                    # plt.show()
+                    plt.savefig('temp.png')
                     imgs = {"img_miscoverage": img_miscoverage,
                             "img_pred_set_size": img_pred_set_size,
                             "img_nonconformity": img_nonconformity}
@@ -729,17 +885,19 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
 
         # Report the performance versus ablations as coverage bound varies
         if test_cal:
+            optimal_temps = [temperatures[int(i)] for i in calibration_temps]
+            lb = 0.35 if use_bimanual else 0.5
             img_coverage = plot_prediction_set_size_versus_success(
                 agg_prediction_set_size, agg_task_success_rate, agg_help_rate,
                 knowno_agg_prediction_set_size, knowno_agg_task_success_rate, knowno_agg_help_rate,
                 simple_set_agg_prediction_set_size, simple_set_agg_task_success_rate, simple_set_agg_help_rate,
                 entropy_set_agg_prediction_set_size, entropy_set_agg_task_success_rate, entropy_set_agg_help_rate,
-                no_help_agg_task_success_rate
+                no_help_agg_task_success_rate, optimal_temps, success_rate_lower_bound=lb
             )
             import pandas as pd
             import time
             from PIL import Image
-            save_path = '/home/jlidard/PredictiveRL/results'
+            save_path = '/home/jlidard/risk_calibrated_interactive_planning/results'
             nano_string = "ablation_" + cal_str + str(time.time_ns())
             save_dir = os.path.join(save_path, nano_string)
             os.makedirs(save_dir, exist_ok=True)
@@ -777,11 +935,10 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
             img_coverage.save(os.path.join(save_dir,'plot.png'))
             imgs_ret[f"{test_str}cal_risk_imgs_figures/results"] = img_coverage
             img_coverage.save(os.path.join(save_dir, 'plot.png'))
-            import matplotlib.pyplot as plt
+
             plt.imshow(img_coverage)
             plt.show()
 
-    should_draw_heatmap = True
     if should_draw_heatmap and not test_cal:
 
 
@@ -839,7 +996,6 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
         )
 
         imgs_ret[f"{test_str}cal_risk_imgs_figures/results"] = img_help
-        import matplotlib.pyplot as plt
         import pandas as pd
         import time
         from PIL import Image
@@ -862,53 +1018,3 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
 
     return risk_metrics, imgs_ret
 
-# def deploy_predictor(dataloader, risk_evaluator, lambdas, num_cal, traj_len=100, predict_step_interval=10,
-#                         num_intent=5, epsilons=0.15, alpha0s=0.15, alpha1s=0.15, equal_action_mask_dist=0.05,
-#                         use_habitat=False, use_vlm=False, test_cal=False):
-#
-#     cnt = 0
-#     num_lambdas = len(lambdas)
-#     num_calibration = num_cal
-#     dataloader_tqdm = tqdm(dataloader)
-#     max_steps = traj_len // predict_step_interval
-#     non_conformity_score = -np.inf*torch.ones((num_calibration, max_steps))
-#     prediction_set_size = -np.inf*torch.ones((num_calibration, max_steps, num_lambdas))
-#     miscoverage_instance = -np.inf*torch.ones((num_calibration, max_steps, num_lambdas))
-#     batch_start_ind = 0
-#     model.eval()
-#     index_set = list(range(len(lambdas)))
-#
-#     with torch.no_grad():
-#
-#         total_metrics = {}
-#         for batch_dict in dataloader_tqdm:
-#             episode_metrics = {}
-#             cnt += 1
-#
-#             batch_X = batch_dict["obs_full"].cuda()
-#             batch_z = batch_dict["intent_full"].cuda()
-#             reward = batch_dict["reward_full"].cuda()
-#             batch_pos = batch_dict["human_full_traj"].cuda()
-#             actions = batch_dict["all_actions"].cuda()
-#             batch_size = batch_X.shape[0]
-#
-#             batch_end_ind = batch_start_ind + batch_X.shape[0]
-#
-#             traj_len = batch_X.shape[1]
-#             traj_windows = torch.arange(predict_step_interval, traj_len, predict_step_interval)
-#
-#             for t, endpoint in enumerate(traj_windows):
-#                 if not use_vlm:
-#                     input_t = batch_X[:, :endpoint]
-#                     label = batch_z[:, endpoint-1].long()
-#                     input_human_pos = batch_pos[:, :endpoint]
-#                     cumulative_reward = reward[:, :endpoint]
-#                     risk_evaluator.update_intent(label.item())
-#                     intent, confidence = risk_evaluator.infer_intent(observation_history, human_pos_history, timesteps, cumulative_reward)
-#             metrics = risk_evaluator.get_metrics()
-#             if metrics != {}:
-#                 episode_metrics.append(metrics)
-#         episode_metrics = dict_collate(episode_metrics, compute_max=True)
-#         total_metrics.append(episode_metrics)
-#     total_metrics = dict_collate(total_metrics, compute_mean=True)
-#     return total_metrics

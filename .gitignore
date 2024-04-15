@@ -1,2 +1,5 @@
 */__pycache__/*
 franka_calibration/*
+datasets/*
+saved_models/*
+wandb/*

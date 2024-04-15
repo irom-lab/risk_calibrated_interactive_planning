@@ -1,0 +1,30 @@
+env: 'hallway'
+calibrate_only: true
+
+
+calibration:
+  num_temp: 5 # 5
+  grid_points: 100
+  grid_points_simpleset: 5
+  calibration_set_size: 400 # 400
+  test_set_size: 400
+  batch_size: 1
+  num_cov_simpleset: 3
+  draw_heatmap: False
+  minimum_temp: 0.01
+  max_miscoverage: 0.55
+  equal_action_mask_dist: 1.1
+  initial_temp: -0.2
+
+prediction:
+  data_path: /home/jlidard/risk_calibrated_interactive_planning/datasets/hallway/1702934148/rollouts
+  trained_model_path: /home/jlidard/rcip/trained_models/trained_models/hallwayepoch500.pth
+#  trained_model_path: /home/jlidard/rcip/trained_models/trained_models/hallwayepoch500.pth # 500 0 1 2
+  traj_input_dim: 121
+  min_traj_len: 20
+  traj_len: 200
+  max_pred_len: 100
+
+policy:
+  path: /home/jlidard/PredictiveRL/models/1702916332/epoch_500
+

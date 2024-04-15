@@ -29,7 +29,7 @@ from os.path import expanduser
 import wandb
 from wandb_osh.hooks import TriggerWandbSyncHook  # <-- New!
 
-from model_zoo.intent_transformer import IntentFormer
+from models.intent_transformer import IntentFormer
 from scripts.train_intent_prediction_model import get_params
 
 from environments.hallway_env import HumanIntent

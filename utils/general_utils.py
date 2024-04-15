@@ -42,3 +42,41 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+def linear_interpolation(x_y_pairs, y_value):
+    """
+    Perform linear interpolation to find x for a given y.
+
+    Parameters:
+    x_y_pairs (list of tuples): Each tuple contains (x, y).
+    y_value (float): The y-value for which x needs to be interpolated.
+
+    Returns:
+    float: The interpolated x value.
+    """
+    # Sort the list by y values to ensure they are in order
+    x_y_pairs.sort(key=lambda pair: pair[1])
+
+    for i in range(len(x_y_pairs) - 1):
+        x1, y1 = x_y_pairs[i]
+        x2, y2 = x_y_pairs[i + 1]
+
+        # Find the segment where the y_value lies
+        if y1 <= y_value <= y2:
+            # Interpolate x using the formula
+            return x1 + (x2 - x1) * (y_value - y1) / (y2 - y1)
+
+    # If no segment found, it means y_value is outside the range provided
+    raise ValueError("y_value is outside the range of the provided y-values")
+
+
+if __name__ == '__main__':
+    # Example usage:
+    x_y_pairs = [(1, 10), (2, 20), (3, 30)]
+    y_value = 25
+    try:
+        x_result = linear_interpolation(x_y_pairs, y_value)
+        print(f"Interpolated x for y={y_value} is {x_result}")
+    except ValueError as e:
+        print(e)
