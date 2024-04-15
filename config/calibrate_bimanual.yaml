@@ -1,0 +1,26 @@
+env: 'bimanual'
+calibrate_only: true
+
+calibration:
+  num_temp: 5
+  grid_points: 40
+  grid_points_simpleset: 5
+  calibration_set_size: 400
+  test_set_size: 100
+  batch_size: 1
+  num_cov_simpleset: 3
+  draw_heatmap: False
+  minimum_temp: 0.01
+  max_miscoverage: 0.7
+  equal_action_mask_dist: 1
+  initial_temp: -0.1 # logtemp
+
+
+prediction:
+  data_path: /home/jlidard/risk_calibrated_interactive_planning/datasets/vlm_bimanual/calibration
+  traj_input_dim: 0
+  traj_len: 1
+  min_traj_len: 1
+  max_pred_len: 1
+  trained_model_path: null
+

@@ -8,6 +8,8 @@ from torchvision import transforms, utils
 
 from collections import OrderedDict
 
+import pickle
+
 class IntentPredictionDataset(Dataset):
     """Face Landmarks dataset."""
 
@@ -25,7 +27,8 @@ class IntentPredictionDataset(Dataset):
 
 
     def __init__(self, root_dir, train_set_size=5, is_train=True, max_pred=100, debug=False, min_len=10, target_len=200,
-                 max_in_set=None, use_habitat=False, use_vlm=False, calibration_set_size=0, seed=1234, is_calibration=False,
+                 max_in_set=None, use_habitat=False, use_vlm=False, use_bimanual=False,
+                 calibration_set_size=0, seed=1234, is_calibration=False,
                  is_calibration_test=False):
         """
         Arguments:
@@ -41,6 +44,7 @@ class IntentPredictionDataset(Dataset):
         self.min_len = min_len
         self.use_habitat = use_habitat
         self.use_vlm = use_vlm
+        self.use_bimanual = use_bimanual
         indices = list(range(num_total_data))
         np.random.seed(seed)
         np.random.shuffle(indices)
@@ -70,11 +74,16 @@ class IntentPredictionDataset(Dataset):
             file_path = os.path.join(root_dir, subdir)
             if self.use_vlm:
                 file_path = os.path.join(file_path, "ground_truth.csv")
+            elif self.use_bimanual:
+                file_path = os.path.join(file_path, "intent.pkl")
             if not os.path.isfile(file_path):
                 continue
             if max_in_set is not None and i >= max_in_set:
                 continue
-            traj_data = pd.read_csv(file_path, on_bad_lines='skip')
+            if not use_bimanual:
+                traj_data = pd.read_csv(file_path, on_bad_lines='skip')
+            else:
+                traj_data = pickle.load(open(file_path, "rb"))
             if self.valid_traj(traj_data):
                 full_path = os.path.join(root_dir, subdir)
                 self.traj_dict[full_path] = traj_data
@@ -83,7 +92,7 @@ class IntentPredictionDataset(Dataset):
         self.root_dir = root_dir
 
     def valid_traj(self, traj_data):
-        if self.use_vlm:
+        if self.use_vlm or self.use_bimanual:
             return True
         return len(traj_data.index) >= self.min_len
 
@@ -106,7 +115,7 @@ class IntentPredictionDataset(Dataset):
             robot_ind_start = self._habitat_robot_pos_index
             human_ind_start = self._habitat_human_pos_index
             end_of_obs = -num_intent*2 - 1
-        elif self.use_vlm:
+        elif self.use_vlm or self.use_bimanual:
             ground_truth_intent = rollout_data["Groundtruth"]
         else:
             robot_ind_start = self._hallway_robot_pos_index
@@ -114,7 +123,7 @@ class IntentPredictionDataset(Dataset):
             end_of_obs = self._hallway_end_of_obs
 
 
-        if not self.use_vlm:
+        if not self.use_vlm and not self.use_bimanual:
             traj_len = len(rollout_data.index)
             traj_stop = traj_len - self.max_pred # np.random.randint(low=self.min_len, high=traj_len-self.max_pred)
             Tstop = traj_stop
@@ -131,7 +140,7 @@ class IntentPredictionDataset(Dataset):
             all_actions = torch.zeros(rollout_data.shape[0], self._habitat_max_total_actions)
             all_actions[:, :num_intent*2] = torch.Tensor(rollout_data.iloc[:, end_of_obs:-1].values).cuda()
             all_actions = torch.clamp(all_actions, min=-10, max=10)
-        elif self.use_vlm:
+        elif self.use_vlm or self.use_bimanual:
             pass
         else:
             all_actions = torch.Tensor(rollout_data.iloc[:, -3:-1].values).cuda() # optimal action only
@@ -140,6 +149,38 @@ class IntentPredictionDataset(Dataset):
         if self.use_vlm:
             ret_dict = {"directory_name": filename,
                         "intent_full": torch.Tensor(ground_truth_intent)}
+        elif self.use_bimanual:
+            scenario_num = filename.split('/')[-1].split('_')[-1]
+            scenario_num = int(scenario_num)
+            language_filename = os.path.join(filename, '..', '..')
+            if scenario_num < 201:
+                language_filename = os.path.join(language_filename, 'img_200.json')
+            elif scenario_num < 401:
+                language_filename = os.path.join(language_filename, 'img_400.json')
+            elif scenario_num < 601:
+                language_filename = os.path.join(language_filename, 'img_600.json')
+            else:
+                language_filename = os.path.join(language_filename, 'img_615.json')
+            import json
+            language_descriptions = json.load(open(language_filename, "rb"))
+            desc = language_descriptions[str(scenario_num)]
+            valid_intent = torch.zeros(5).cuda()
+            intent_as_tensor = torch.Tensor([ground_truth_intent]).cuda()
+            if isinstance(ground_truth_intent, int) or isinstance(ground_truth_intent, float):
+                if ground_truth_intent > 5:
+                    ground_truth_intent = 5
+                valid_intent[int(ground_truth_intent)-1] = 1
+            else:
+                for i in range(len(ground_truth_intent)):
+                    el = int(ground_truth_intent[i])
+                    if el > 5:
+                        el = 5
+                    valid_intent[el-1] = 1
+            ret_dict = {"directory_name": filename,
+                        "instruction": desc,
+                        "intent_full": valid_intent[None]}
+
+
         else:
 
             robot_ind_end = robot_ind_start + 3

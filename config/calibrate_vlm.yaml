@@ -1,0 +1,25 @@
+env: 'vlm'
+calibrate_only: true
+
+calibration:
+  num_temp: 5
+  grid_points: 100
+  grid_points_simpleset: 5
+  calibration_set_size: 400
+  test_set_size: 100
+  batch_size: 1
+  num_cov_simpleset: 3
+  draw_heatmap: False
+  minimum_temp: 0.1
+  max_miscoverage: 0.5
+  equal_action_mask_dist: 1
+
+
+prediction:
+  data_path: /home/jlidard/risk_calibrated_interactive_planning/datasets/vlm_sorting/open_category_sorting
+  traj_input_dim: 0
+  traj_len: 8
+  min_traj_len: 1
+  max_pred_len: 1
+  trained_model_path: None
+

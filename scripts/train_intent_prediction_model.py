@@ -22,12 +22,17 @@ from PIL import Image
 
 from utils.visualization_utils import plot_pred, get_img_from_fig
 
+from utils.risk_utils import get_knowno_epsilon_values
 from utils.intent_dataset import IntentPredictionDataset, collate_fn, collate_fn_stack_only
 from utils.training_utils import get_epoch_cost, calibrate_predictor, save_model
-from calibrate_hallway import get_knowno_epsilon_values
-from model_zoo.intent_transformer import IntentFormer
+from models.intent_transformer import IntentFormer
 
 from utils.training_utils import run_calibration
+
+import yaml
+
+import matplotlib
+
 
 def get_params(traj_input_dim, num_intent):
 
@@ -49,7 +54,13 @@ def get_params(traj_input_dim, num_intent):
 
 def run():
 
-    parser = argparse.ArgumentParser(prog='BulletHallwayEnv')
+    font = {
+            # 'weight': 'bold',
+            'size': 26}
+
+    matplotlib.rc('font', **font)
+
+    parser = argparse.ArgumentParser()
     parser.add_argument('--max-steps', type=int, default=100)
     parser.add_argument('--network-hidden-dim', type=int, default=64)
     parser.add_argument('--n-epochs', type=int, default=10)
@@ -78,7 +89,6 @@ def run():
     parser.add_argument('--calibration-test-set-size', type=int, default=50)
     parser.add_argument('--use-habitat', type=str2bool, default=False)
     parser.add_argument('--use-vlm', type=str2bool, default=False)
-    parser.add_argument('--habitat-csv-dir', type=str, default=None)
     parser.add_argument('--traj-len', type=int, default=200)
     parser.add_argument('--num-intent', type=int, default=5)
     parser.add_argument('--traj-input-dim', type=int, default=121)
@@ -94,9 +104,12 @@ def run():
     parser.add_argument("--load-in-4bit", type=str2bool, default=False)
     parser.add_argument("--use-llava", type=str2bool, default=False)
     parser.add_argument("--seed", type=int, default=12345678)
-    parser.add_argument('--vlm-csv-dir', type=str, default=None)
     parser.add_argument('--resume-lr', type=float, default=None)
     parser.add_argument('--num-temp', type=int, default=10)
+
+    parser.add_argument('--yaml-file', type=str, default='../config/calibrate_hallway.yaml')
+
+
 
 
 
@@ -110,6 +123,13 @@ def run():
 
     args_namespace = parser.parse_args()
     args = vars(args_namespace)
+    yaml_file = args["yaml_file"]
+
+    with open(yaml_file) as f:
+        yaml_args = yaml.safe_load(f)
+
+    args.update(yaml_args)
+
     max_steps = args["max_steps"]
     render = args["render"]
     num_cpu = args["num_envs"]
@@ -136,17 +156,19 @@ def run():
     offline = args["offline"]
     calibration_interval = args["calibration_interval"]
     validation_interval = args["validation_interval"]
-    calibration_set_size = args["calibration_set_size"]
-    calibration_test_set_size = args["calibration_test_set_size"]
+    calibration_set_size = args["calibration"]["calibration_set_size"]
+    calibration_test_set_size = args["calibration"]["test_set_size"]
     entropy_coeff = args["entropy_coeff"]
-    use_habitat = args["use_habitat"]
-    use_vlm = args["use_vlm"]
+
+    use_habitat = args['env'] == 'habitat'
+    use_vlm =  args['env'] == 'vlm'  # TODO: differentiate 'bimanual transfer' and 'sorting'
+    use_hallway =  args['env'] == 'hallway'
+    use_bimanual = args['env'] == 'bimanual'
+
+
     num_intent= args["num_intent"]
     seed = args["seed"]
-    if use_habitat:
-        traj_input_dim = 350 # args["traj_input_dim"]
-    else:
-        traj_input_dim = 121
+    traj_input_dim = args["prediction"]["traj_input_dim"]
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -163,8 +185,8 @@ def run():
     n_iters = 100000
     video_length = max_steps
 
-    if not use_habitat and not use_vlm:
-        eval_policy = PPO.load(counterfactual_policy_load_path, device="cuda")
+    if use_hallway:
+        eval_policy = PPO.load(args['policy']['path'], device="cuda")
     else:
         eval_policy = None
 
@@ -173,18 +195,24 @@ def run():
 
     home = expanduser("~")
     logdir = os.path.join(home, f"PredictiveRL/models/predictor_{rollout_num}/")
-    csv_dir = f"/home/jlidard/PredictiveRL/logs/{rollout_num}/rollouts"
+    csv_dir = args["prediction"]["data_path"]
     if use_habitat:
-        csv_dir = args["habitat_csv_dir"]
         anchors = None
-        min_traj_len = 100
+        min_traj_len = args["prediction"]["min_traj_len"]
         traj_len = 600
         load_model_path = load_model_path_habitat
         max_pred_len = 100
     elif use_vlm:
-        csv_dir = args["vlm_csv_dir"]
         anchors = None
         traj_len = 8
+        min_traj_len = args["prediction"]["min_traj_len"]
+        load_model_path = None
+        max_pred_len = 1
+        train_set_size = 1
+    elif use_bimanual:
+        anchors = None
+        traj_len = 1
+        min_traj_len = args["prediction"]["min_traj_len"]
         load_model_path = None
         max_pred_len = 1
         train_set_size = 1
@@ -192,17 +220,19 @@ def run():
         anchors_y = torch.linspace(-5, 5, 5)
         anchors = torch.zeros(5, 2)
         anchors[:, -1] = anchors_y
-        min_traj_len = 20
+        min_traj_len = args["prediction"]["min_traj_len"]
         traj_len = 200
         load_model_path = load_model_path_hallway
         max_pred_len = 100
+    traj_len = args["prediction"]["traj_len"]
+    load_model_path = args["prediction"]["trained_model_path"]
 
     os.makedirs(logdir, exist_ok=True)
 
-    wandb.init(
-        project="conformal_rl_prediction",
-        mode="online" if not offline else "offline"
-    )
+    # wandb.init(
+    #     project="conformal_rl_prediction",
+    #     mode="online" if not offline else "offline"
+    # )
 
     hdim = 256
     future_horizon = max_pred_len
@@ -213,55 +243,72 @@ def run():
     output_len = future_horizon
     diff_order = 1
     hidden_size = hdim
-    num_temp = args["num_temp"]
+    num_temp = args["calibration"]["num_temp"]
     delta = 0.01
     miscoverage_max = 0.4
-    return_len=40
-    alpha0s, eps_knowno = get_knowno_epsilon_values(return_len=return_len)
+    grid_points=args["calibration"]["grid_points"]
+    alpha0s, eps_knowno = get_knowno_epsilon_values(dataset_size=calibration_set_size, miscoverage_max=args["calibration"]["max_miscoverage"], num_points=grid_points)
     print(alpha0s.shape)
     epsilons = eps_knowno
     alpha0s = alpha0s
-    alpha0s_simpleset = np.linspace(.01, 1, len(eps_knowno))
+    alpha0s_simpleset = np.linspace(0, 1, args["calibration"]["grid_points"])
     alpha1s = np.linspace(0, 1.0, len(eps_knowno)) # np.arange(0.04, 1, 0.004)[:2]
-    temperatures = np.linspace(0, 0.7, num_temp)
-    temperatures[0] = 1
-    num_thresh = 200
+    print(epsilons)
+    print(alpha0s)
+    print(alpha0s_simpleset)
+    min_temp = np.log10(args["calibration"]["minimum_temp"])
+    initial_temp = args["calibration"]["initial_temp"]
+    if use_vlm:
+        temperatures = np.logspace(min_temp, 0.5, num_temp)
+    elif use_bimanual:
+        temperatures = np.logspace(initial_temp, min_temp, num_temp)
+    else:
+        temperatures = np.logspace(initial_temp, min_temp, num_temp)
+    # temperatures = np.linspace(1, 0, num_temp)
+    if len(temperatures) > 1 and not use_habitat:
+        temperatures[-1] = 0
+    if use_habitat:
+        temperatures[0] = .1
+    # temperatures = np.logspace(-10, 0, num_temp)
+
+    print(temperatures)
+    # temperatures[0] = 1
+    num_thresh = 2000
     lambda_interval = 1 / num_thresh
-    lambda_values = np.linspace(0, 0.7, num_thresh)
+    lambda_values = np.linspace(0, 1, num_thresh)
     debug = True
     train_max_in_set = train_set_size
 
     train_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=True,
                                        max_pred=future_horizon, debug=debug, min_len=traj_len,
-                                       use_habitat=use_habitat, use_vlm=use_vlm, seed=seed,
+                                       use_habitat=use_habitat, use_vlm=use_vlm, use_bimanual=use_bimanual, seed=seed,
                                        max_in_set=train_max_in_set)
     test_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False,
                                       max_pred=future_horizon,  debug=debug, min_len=traj_len,
-                                      use_habitat=use_habitat, use_vlm=use_vlm, seed=seed,
+                                      use_habitat=use_habitat, use_vlm=use_vlm, use_bimanual=use_bimanual, seed=seed,
                                       max_in_set=train_max_in_set)
     cal_ds = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False,
                                      max_pred=future_horizon, debug=debug, min_len=traj_len,
                                      max_in_set=calibration_set_size, use_habitat=use_habitat, seed=seed, use_vlm=use_vlm,
-                                     is_calibration=True)
+                                     use_bimanual=use_bimanual, is_calibration=True)
     cal_ds_test = IntentPredictionDataset(csv_dir, train_set_size=train_set_size, is_train=False,
                                      max_pred=future_horizon, debug=debug, min_len=traj_len,
                                      max_in_set=calibration_test_set_size, use_habitat=use_habitat, use_vlm=use_vlm,
-                                     calibration_set_size=calibration_set_size, seed=seed, is_calibration_test=True)
+                                     use_bimanual=use_bimanual, calibration_set_size=calibration_set_size,
+                                     seed=seed, is_calibration_test=True)
 
-    if use_vlm:
+    if use_vlm or use_bimanual:
         collate_dict = collate_fn_stack_only
     else:
         collate_dict = collate_fn
 
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=collate_dict)
     test_loader = DataLoader(test_ds, batch_size=val_batch_size, shuffle=True, collate_fn=collate_dict)
-    cal_loader = DataLoader(cal_ds, batch_size=1, shuffle=True, collate_fn=collate_dict)
-    cal_loader_test = DataLoader(cal_ds_test, batch_size=1, shuffle=True, collate_fn=collate_dict)
+    cal_loader = DataLoader(cal_ds, batch_size=args["calibration"]["batch_size"], shuffle=True, collate_fn=collate_dict)
+    cal_loader_test = DataLoader(cal_ds_test, batch_size=args["calibration"]["batch_size"], shuffle=True, collate_fn=collate_dict)
     num_cal = cal_ds.__len__()
 
-    # TODO: CHANGE BACK
-
-    if use_vlm:
+    if use_vlm or use_bimanual:
         # Only need to do a single iteration, since model is static
 
         data_dict = {}
@@ -277,6 +324,7 @@ def run():
                                 num_intent,
                                 use_habitat,
                                 use_vlm,
+                                use_bimanual,
                                 epsilons,
                                 delta,
                                 alpha0s,
@@ -284,7 +332,8 @@ def run():
                                 alpha1s,
                                 data_dict,
                                 logdir,
-                                0)
+                                0,
+                                equal_action_mask_dist=args["calibration"]["equal_action_mask_dist"])
 
         knowno_calibration_thresholds = risk_metrics["knowno_calibration_thresholds"]
         calibration_thresholds = risk_metrics["calibration_thresholds"]
@@ -302,6 +351,7 @@ def run():
                         num_intent,
                         use_habitat,
                         use_vlm,
+                        use_bimanual,
                         epsilons,
                         delta,
                         alpha0s,
@@ -313,7 +363,9 @@ def run():
                         calibration_thresholds=calibration_thresholds,
                         knowno_calibration_thresholds=knowno_calibration_thresholds,
                         calibration_temps=calibration_temps,
-                        test_cal=True)
+                        draw_heatmap=args["calibration"]["draw_heatmap"],
+                        test_cal=True,
+                        equal_action_mask_dist=args["calibration"]["equal_action_mask_dist"])
 
         wandb.log(data_dict)
         return
@@ -378,6 +430,7 @@ def run():
                                                   num_intent,
                                                   use_habitat,
                                                   use_vlm,
+                                                  use_bimanual,
                                                   epsilons,
                                                   delta,
                                                   alpha0s,
@@ -385,7 +438,8 @@ def run():
                                                   alpha1s,
                                                   data_dict,
                                                   logdir,
-                                                  epoch)
+                                                  epoch,
+                                                  equal_action_mask_dist=args["calibration"]["equal_action_mask_dist"])
                 knowno_calibration_thresholds = risk_metrics["knowno_calibration_thresholds"]
                 calibration_thresholds = risk_metrics["calibration_thresholds"]
                 calibration_temps = risk_metrics["calibration_temps"]
@@ -402,6 +456,7 @@ def run():
                                 num_intent,
                                 use_habitat,
                                 use_vlm,
+                                use_bimanual,
                                 epsilons,
                                 delta,
                                 alpha0s,
@@ -413,7 +468,8 @@ def run():
                                 calibration_thresholds=calibration_thresholds,
                                 knowno_calibration_thresholds=knowno_calibration_thresholds,
                                 calibration_temps=calibration_temps,
-                                test_cal=True)
+                                test_cal=True,
+                                equal_action_mask_dist=args["calibration"]["equal_action_mask_dist"])
 
             save_model(my_model, use_habitat, use_vlm, epoch)
 
