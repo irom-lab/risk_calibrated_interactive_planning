@@ -67,7 +67,7 @@ import string
 import unittest
 
 # Set OpenAI API key.
-openai_api_key = "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"  # Justin's key
+openai_api_key = api_key = os.environ.get('OPENAI_API_KEY') # Justin's key
 openai.api_key = openai_api_key
 
 prob_bins = list(np.arange(0, 101, 20))
