@@ -261,7 +261,7 @@ def run():
     if use_vlm:
         temperatures = np.logspace(min_temp, 0.5, num_temp)
     elif use_bimanual:
-        temperatures = np.logspace(initial_temp, min_temp, num_temp)
+        temperatures = np.logspace(min_temp, 0.5, num_temp)
     else:
         temperatures = np.logspace(initial_temp, min_temp, num_temp)
     # temperatures = np.linspace(1, 0, num_temp)
