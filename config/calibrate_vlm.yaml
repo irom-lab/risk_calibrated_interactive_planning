@@ -11,8 +11,9 @@ calibration:
   num_cov_simpleset: 3
   draw_heatmap: False
   minimum_temp: 0.1
-  max_miscoverage: 0.5
+  max_miscoverage: 0.52
   equal_action_mask_dist: 1
+  initial_temp: 0.5
 
 
 prediction:

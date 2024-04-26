@@ -188,7 +188,7 @@ def make_obs_dict_hallway(obs, intent, intent_index):
 def fixed_sequence_testing(lambdas, pvals, delta, index_set, temperatures, bound_help=False, index_spacing=1):
     lambda_hat = []
     pvals_set = []
-    union_bound_correction = len(temperatures) #* len(index_set)
+    union_bound_correction = len(temperatures) * len(index_set)
     for k in index_set:
         j = k
         lam = lambdas[j]

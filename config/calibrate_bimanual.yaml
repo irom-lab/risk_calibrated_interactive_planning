@@ -3,17 +3,17 @@ calibrate_only: true
 
 calibration:
   num_temp: 5
-  grid_points: 40
+  grid_points: 100 # 100
   grid_points_simpleset: 5
   calibration_set_size: 400
-  test_set_size: 100
+  test_set_size: 200
   batch_size: 1
   num_cov_simpleset: 3
   draw_heatmap: False
-  minimum_temp: 0.01
+  minimum_temp: 0.35
   max_miscoverage: 0.7
   equal_action_mask_dist: 1
-  initial_temp: -0.1 # logtemp
+  initial_temp: 1.5 # logtemp
 
 
 prediction:

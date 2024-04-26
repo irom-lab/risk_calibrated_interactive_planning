@@ -66,6 +66,8 @@ class IntentPredictionDataset(Dataset):
             #      14669, 13083, 3595, 4807, 13460, 6134, 12429, 8506, 15927, 8409, 14633, 2751]
 
         subdirs = [subdirs[i] for i in indices]
+        if is_calibration_test:
+            print(subdirs)
         self.traj_dict = OrderedDict()
         self.target_len = min_len
         self.file_names = {}
