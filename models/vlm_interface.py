@@ -342,7 +342,7 @@ def generate_prediction_openai_vision_only(prompt,
                                is_dir=True):
     text_description = None
     full_message, scores = check_if_plan_exists(image_files, temperature_vlm)
-    full_message = None
+    # full_message = None
     if full_message is None or scores is None:
         language_tokens = 1
         full_message, scores = vlm_or_llm(prompt, image_files, max_tokens=1,

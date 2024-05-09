@@ -515,7 +515,7 @@ def calibrate_predictor(args, dataloader, model, policy_model, lambdas, temperat
                         label = torch.Tensor([int(true_plan.split('_')[-1])-1]).cuda().long()
                         label = label
                         score = action_set
-
+                        print(f'{cnt}: {dir_name}: {batch_z}')
 
                     # print(score, label.item())
                     # score = torch.nan_to_num(score, 1/(score.shape[1]-1))

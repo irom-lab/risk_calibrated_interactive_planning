@@ -58,7 +58,7 @@ def load_results():
             new_plot_name = 'plot_redo.png'
             new_filepath = os.path.join('/home/', *file_path[2:-1], new_plot_name)
             target = 0.5
-            zero_crossings = -1 # np.where(np.diff(np.sign(agg_task_success_rate - target)))[0][-1]
+            zero_crossings = -30# np.where(np.diff(np.sign(agg_task_success_rate - target)))[0][-1]
 
             img_coverage = plot_prediction_set_size_versus_success(
                 agg_prediction_set_size[:zero_crossings],
@@ -77,7 +77,19 @@ def load_results():
                 calibration_temps=None,
             )
             img_coverage.save(new_filepath)
-
+        grid_points = 100
+        i_temp = data["calibration_temps"]
+        i_lambda = data["calibration_thresholds"]
+        i_knowno = data["knowno_calibration_thresholds"]
+        i_temp = [int(i) for i in i_temp]
+        i_lambda = [int(i) for i in i_lambda]
+        i_knowno = [int(i) for i in i_knowno]
+        temperatures = np.logspace(0.35, 0.5, 5)
+        lambdas = np.linspace(0, 1, 2000)
+        optimal_temp = temperatures[i_temp[60]]
+        optimal_lambda = lambdas[i_lambda[60]]
+        knowno_lambda = lambdas[i_knowno[60]]
+        print(f"temp: {optimal_temp}, lambda: {optimal_lambda}")
         target_val = 0.75 #if not label == "vlm" else 0.8
         plan_result, help_result, success_stage_result, help_stage_result = get_intermediates_lin_interp(
             agg_task_success_rate, agg_help_rate, agg_task_success_rate_stage, agg_help_rate_stage,
@@ -111,6 +123,33 @@ def load_results():
         )
         print(label)
         print(table)
+
+        hardware_results = pickle.load(
+            open("/home/jlidard/risk_calibrated_interactive_planning/rcip_hardware_results.pkl", "rb"))
+        i_knowno_biarm = i_knowno[60]
+        i_rcip_biarm = i_lambda[60]
+        i_temp_biarm = i_temp[60]
+        failures = hardware_results['hardware_failures']
+        rcip_results = hardware_results['rcip'][2, :30, 0, 5].numpy()
+        knowno_results= hardware_results['knowno'][0, :30, 0, i_knowno_biarm-50].numpy()
+        simpleset_results = hardware_results['simpleset'][0, :30, 0, 75].numpy()
+        entropy_results = hardware_results['entropy'][0, :30, 0].numpy()
+        no_help_results = hardware_results['nohelp'][0, :30, 0].numpy()
+
+        rcip_results = np.maximum(rcip_results, failures)
+        knowno_results = np.maximum(knowno_results, failures)
+        simpleset_results = np.maximum(simpleset_results, failures)
+        entropy_results = np.maximum(entropy_results, failures)
+        no_help_results = np.maximum(no_help_results, failures)
+
+        rcip_hsr = 1-rcip_results.mean()
+        knowno_hsr = 1-knowno_results.mean()
+        simpleset_hsr = 1-simpleset_results.mean()
+        entropy_hsr = 1-entropy_results.mean()
+        no_help_hsr = 1-no_help_results.mean()
+
+        print(rcip_hsr, knowno_hsr, simpleset_hsr, entropy_hsr, no_help_hsr)
+
         print()
 
 
@@ -125,6 +164,7 @@ def get_intermediates_lin_interp(agg_task_success_rate, agg_help_rate, agg_task_
 
     if alphas is not None:
         print(1-alphas[i_under], 1-alphas[i_over])
+    print(i_under, i_over)
 
     # Help
     help_under = agg_help_rate[i_under]

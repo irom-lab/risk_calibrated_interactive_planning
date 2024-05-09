@@ -190,6 +190,7 @@ def plot_prediction_set_size_versus_success(prediction_set_size, task_success_ra
     ax2.set_ylabel('Plan Success Rate')
     ax2.set_xlabel('Human Help Rate')
     ax2.set_xlim([-0.02, 1])
+    success_rate_lower_bound = 0.5
     ax2.set_ylim([success_rate_lower_bound, 1.02])
     # plt.axis('equal')
     # major_ticks_x = [0, 0.2, 0.4, 0.6, 0.8, 1]
@@ -205,6 +206,8 @@ def plot_prediction_set_size_versus_success(prediction_set_size, task_success_ra
     ax2.yaxis.set_ticks_position('left')
     label_with_arrow(ax2, r'lower $\alpha_{\text{cov}}$', xy=(0.85, 0.65), xytext=(0.6, 0.45),
                      arrowprops=dict(facecolor='black', arrowstyle='->', lw=3, linestyle='dashed'))
+    # label_with_arrow(ax2, r'lower $\alpha_{\text{cov}}$', xy=(0.75, 0.75), xytext=(0.5, 0.55),
+    #                  arrowprops=dict(facecolor='black', arrowstyle='->', lw=3, linestyle='dashed'))
 
     f.legend(loc="lower center", ncol=3, frameon=False)
 
